@@ -1,0 +1,64 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: white;
+
+  p {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0.25em;
+
+    input, span {
+      &:not(:first-child) {
+        margin-left: 0.3em;
+      }
+    }
+
+    span {
+      &.green {
+        color: #0ebb0e;
+      }
+
+      &.red {
+        color: #bb0e0e;
+      }
+    }
+  }
+
+  textarea {
+    background: transparent;
+    border-radius: 0.5em;
+    border: 1px solid white;
+    resize: none;
+    color: white;
+    align-self: stretch;
+    height: 500px;
+    padding: 1em;
+    outline: none;
+  }
+
+  label {
+    margin-top: 1em;
+  }
+
+  button {
+    margin-top: 2em;
+    padding: 1em 2em;
+    font-weight: bold;
+    color: white;
+    border: 1px solid white;
+    border-radius: 0.5em;
+    background: #393185;
+    cursor: pointer;
+
+    &:hover {
+      background: rgb(81, 71, 170);
+    }
+
+    &:active {
+      background: rgb(47, 39, 121);
+    }
+  }
+
+}
