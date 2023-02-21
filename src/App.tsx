@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.scss'
+import fixText from './fix-text';
 
 type Entry = { removed: boolean, original: string, guess?: string, guessed?: boolean };
 
@@ -56,7 +57,7 @@ function QuizLine({ text, percentage, minLength }: { text: string, percentage: n
 }
 
 function App() {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(fixText);
   const [quizzing, setQuizzing] = useState(false);
   const [percentage, setPercentage] = useState('0.2');
   const [minLength, setMinLength] = useState('5');
