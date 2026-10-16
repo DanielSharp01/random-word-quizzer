@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "../../api/client";
 import { getSections, type DocumentSummary } from "../../api/quiz.api";
@@ -30,7 +30,7 @@ function Upload() {
   }
 
   return (
-    <section className="card">
+    <div>
       <label className="upload">
         <span className="button">{busy ? "Feltöltés…" : "Dokumentum feltöltése (.docx)"}</span>
         <input
@@ -44,11 +44,11 @@ function Upload() {
         />
       </label>
       {error && <p className="error">{error}</p>}
-    </section>
+    </div>
   );
 }
 
-function BlanksSettings({ document }: { document: DocumentSummary }) {
+function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; footerEnd: ReactNode }) {
   const navigate = useNavigate();
   const [percent, setPercent] = useState(20);
   const [minLength, setMinLength] = useState(6);
@@ -66,24 +66,29 @@ function BlanksSettings({ document }: { document: DocumentSummary }) {
 
   return (
     <>
-      <div className="document-settings">
+      <div className="fields">
         <label>
           Kitakart szavak aránya
-          <input type="number" min={5} max={60} step={5} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />%
+          <span className="input-suffix">
+            <input type="number" min={5} max={60} step={5} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />%
+          </span>
         </label>
         <label>
           Legalább ennyi betűs szavak
           <input type="number" min={1} max={20} value={minLength} onChange={(e) => setMinLength(Number(e.target.value))} />
         </label>
       </div>
-      <button className="button" disabled={busy} onClick={() => void start()}>
-        Kvíz indítása
-      </button>
+      <div className="card-footer">
+        <button className="button" disabled={busy} onClick={() => void start()}>
+          Kvíz indítása
+        </button>
+        {footerEnd}
+      </div>
     </>
   );
 }
 
-function QuestionsSettings({ document }: { document: DocumentSummary }) {
+function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary; footerEnd: ReactNode }) {
   const navigate = useNavigate();
   const sections = useQuery({ queryKey: ["sections", document.id], queryFn: () => getSections(document.id) });
   const [section, setSection] = useState<number | null>(null);
@@ -109,7 +114,7 @@ function QuestionsSettings({ document }: { document: DocumentSummary }) {
 
   return (
     <>
-      <div className="document-settings">
+      <div className="fields">
         <label>
           Melyik részből?
           <select value={section ?? ""} onChange={(e) => setSection(e.target.value === "" ? null : Number(e.target.value))}>
@@ -127,9 +132,12 @@ function QuestionsSettings({ document }: { document: DocumentSummary }) {
         </label>
       </div>
       {tooLong && <p className="error">Ez a rész túl hosszú egyszerre. Válassz egy kisebb fejezetet.</p>}
-      <button className="button" disabled={busy || tooLong || sections.isPending} onClick={() => void start()}>
-        {busy ? "Kérdések készülnek…" : "Kérdések készítése"}
-      </button>
+      <div className="card-footer">
+        <button className="button" disabled={busy || tooLong || sections.isPending} onClick={() => void start()}>
+          {busy ? "Kérdések készülnek…" : "Kérdések készítése"}
+        </button>
+        {footerEnd}
+      </div>
       {busy && <p className="muted">Az AI most olvassa a szöveget, ez fél percig is eltarthat.</p>}
       {error && <p className="error">{error}</p>}
     </>
@@ -138,6 +146,21 @@ function QuestionsSettings({ document }: { document: DocumentSummary }) {
 
 function DocumentRow({ document }: { document: DocumentSummary }) {
   const [mode, setMode] = useState<"blanks" | "questions">("blanks");
+  const footerEnd = (
+    <div className="card-footer-end">
+      <Link className="button button-quiet" to={`/history?documentId=${document.id}`}>
+        Korábbi eredmények
+      </Link>
+      <button
+        className="button button-quiet button-danger"
+        onClick={() => {
+          if (confirm(`Biztosan törlöd: „${document.title}”? Az eredményei is törlődnek.`)) void deleteDocument(document.id);
+        }}
+      >
+        Törlés
+      </button>
+    </div>
+  );
   return (
     <li className="card document">
       <div className="document-head">
@@ -152,20 +175,7 @@ function DocumentRow({ document }: { document: DocumentSummary }) {
           AI kérdések
         </button>
       </div>
-      {mode === "blanks" ? <BlanksSettings document={document} /> : <QuestionsSettings document={document} />}
-      <div className="document-actions">
-        <Link className="button button-quiet" to={`/history?documentId=${document.id}`}>
-          Korábbi eredmények
-        </Link>
-        <button
-          className="button button-quiet"
-          onClick={() => {
-            if (confirm(`Biztosan törlöd: „${document.title}”? Az eredményei is törlődnek.`)) void deleteDocument(document.id);
-          }}
-        >
-          Törlés
-        </button>
-      </div>
+      {mode === "blanks" ? <BlanksSettings document={document} footerEnd={footerEnd} /> : <QuestionsSettings document={document} footerEnd={footerEnd} />}
     </li>
   );
 }
@@ -174,8 +184,10 @@ export function DocumentsScreen() {
   const documents = useDocuments();
   return (
     <>
-      <h1>Dokumentumaim</h1>
-      <Upload />
+      <div className="page-head">
+        <h1>Dokumentumaim</h1>
+        <Upload />
+      </div>
       {documents.length === 0 ? (
         <p className="muted">Még nincs dokumentumod. Tölts fel egy .docx fájlt, és kvízt készítünk belőle.</p>
       ) : (

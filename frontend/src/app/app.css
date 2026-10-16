@@ -13,19 +13,47 @@
 }
 
 .header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 
+/* The same column as the page, so the nav lines up with the content on a wide screen. */
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 10px 16px;
+}
+
 .header-title {
+  margin-right: 12px;
   font-weight: 800;
   color: var(--text);
+}
+
+.header-title:hover,
+.nav-link:hover,
+.header-signout:hover {
   text-decoration: none;
+}
+
+.nav-link {
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.nav-link:hover {
+  color: var(--text);
+}
+
+.nav-link.active {
+  color: var(--text);
+  background: var(--bg);
+  font-weight: 600;
 }
 
 .header-user {
@@ -34,13 +62,36 @@
 }
 
 .header-signout {
+  padding: 6px 10px;
   color: var(--muted);
 }
 
+.header-signout:hover {
+  color: var(--text);
+}
+
 .page {
-  max-width: 760px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 24px 16px;
+}
+
+.page h1 {
+  margin: 0 0 16px;
+  font-size: 1.75rem;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.page-head h1 {
+  margin: 0;
 }
 
 .loading {
@@ -65,7 +116,8 @@
 .button {
   display: inline-flex;
   align-items: center;
-  min-height: var(--tap);
+  justify-content: center;
+  min-height: 40px;
   padding: 0 18px;
   border: none;
   border-radius: 999px;
@@ -81,9 +133,25 @@
   cursor: default;
 }
 
+.button:hover {
+  text-decoration: none;
+  filter: brightness(1.08);
+}
+
 .button-quiet {
+  padding: 0 12px;
   background: transparent;
   color: var(--muted);
+  font-weight: 500;
+}
+
+.button-quiet:hover {
+  color: var(--text);
+  filter: none;
+}
+
+.button-danger:hover {
+  color: var(--bad);
 }
 
 .upload input {
@@ -119,21 +187,44 @@
   font-size: 1.1rem;
 }
 
-.document-settings {
+/* Short fields side by side, each with its label above it. */
+.fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
-  margin: 12px 0;
+  gap: 12px 20px;
+  margin: 16px 0;
 }
 
-.document-settings input {
-  width: 4.5em;
-  margin: 0 6px;
+.fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
-.document-actions {
+.fields input[type="number"] {
+  width: 7em;
+}
+
+.input-suffix {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+
+.card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+  margin-top: 4px;
+}
+
+.card-footer-end {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .quiz {
@@ -208,16 +299,6 @@
   max-width: 360px;
 }
 
-.field input,
-.field select,
-.stack textarea {
-  font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-}
 
 .manage-ai {
   display: grid;
@@ -278,12 +359,6 @@
 .issued-url {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
 }
 
 .issued {
@@ -338,10 +413,6 @@
   font-weight: 600;
 }
 
-.document-settings select {
-  margin-left: 6px;
-  font: inherit;
-}
 
 .questions {
   display: grid;
@@ -410,8 +481,4 @@
 
 .history-score {
   text-align: right;
-}
-
-.document-actions {
-  margin-top: 12px;
 }

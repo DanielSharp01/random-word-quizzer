@@ -38,3 +38,32 @@ body {
   background: var(--bg);
   color: var(--text);
 }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Zero specificity, so a component's own field style (like the quiz blanks) always wins. */
+:where(input:not([type="file"], [type="checkbox"], [type="radio"]), select, textarea) {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+:where(textarea) {
+  width: 100%;
+  resize: vertical;
+}
+
+:where(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Link, Route, Routes } from "react-router";
+import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router";
 import "../styles.css";
 import "./app.css";
 import { meQuery, queryClient, useMe } from "./queries";
@@ -18,26 +18,31 @@ function Header() {
   const me = useMe();
   return (
     <header className="header">
-      <Link to="/" className="header-title">
-        Quizzer
-      </Link>
-      <Link to="/history" className="header-link">
-        Eredményeim
-      </Link>
-      {me.isOwner && (
-        <>
-          <Link to="/invites" className="header-link">
-            Meghívók
-          </Link>
-          <Link to="/manage-ai" className="header-link">
-            AI kezelése
-          </Link>
-        </>
-      )}
-      <span className="header-user">{me.name ?? me.email}</span>
-      <a className="header-signout" href="/auth/logout">
-        Kijelentkezés
-      </a>
+      <nav className="header-inner">
+        <Link to="/" className="header-title">
+          Quizzer
+        </Link>
+        <NavLink to="/" end className="nav-link">
+          Dokumentumaim
+        </NavLink>
+        <NavLink to="/history" className="nav-link">
+          Eredményeim
+        </NavLink>
+        {me.isOwner && (
+          <>
+            <NavLink to="/invites" className="nav-link">
+              Meghívók
+            </NavLink>
+            <NavLink to="/manage-ai" className="nav-link">
+              AI kezelése
+            </NavLink>
+          </>
+        )}
+        <span className="header-user">{me.name ?? me.email}</span>
+        <a className="header-signout" href="/auth/logout">
+          Kijelentkezés
+        </a>
+      </nav>
     </header>
   );
 }
