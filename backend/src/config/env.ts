@@ -27,5 +27,14 @@ export const env = zodStringify(
     /** Overrides the drizzle folder, which the bundled server can't find next to its source. */
     MIGRATIONS_DIR: z.string().optional(),
     MIGRATE_ON_START: z.boolean().default(false),
+    /**
+     * 32 random bytes, base64, sealing the shared ChatGPT tokens at rest; AI features are off
+     * without it. Make one with: openssl rand -base64 32
+     */
+    AI_TOKEN_KEY: z
+      .string()
+      .transform((key) => Buffer.from(key, "base64"))
+      .refine((key) => key.length === 32, "AI_TOKEN_KEY must be 32 bytes, base64-encoded")
+      .optional(),
   }),
 ).parse(process.env);

@@ -4,7 +4,7 @@ import { db } from "../providers/db";
 import { findUser } from "../repositories/user.repo";
 import { authedRouter } from "../routers";
 
-const meResponseSchema = z.object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable() });
+const meResponseSchema = z.object({ id: z.uuid(), email: z.string().nullable(), name: z.string().nullable(), isOwner: z.boolean() });
 
 export function meController() {
   authedRouter.use({ metadata: { tags: ["Me"] } }).get("/me", (line) =>

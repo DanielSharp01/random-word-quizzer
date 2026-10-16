@@ -57,6 +57,6 @@ export class UserRepository {
 }
 
 export async function findUser(ex: Executor, id: string) {
-  const [user] = await ex.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, id));
+  const [user] = await ex.select({ id: usersTable.id, email: usersTable.email, name: usersTable.name, isOwner: usersTable.isOwner }).from(usersTable).where(eq(usersTable.id, id));
   return user;
 }

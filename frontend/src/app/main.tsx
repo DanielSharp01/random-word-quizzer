@@ -6,6 +6,7 @@ import "../styles.css";
 import "./app.css";
 import { meQuery, queryClient, useMe } from "./queries";
 import { DocumentsScreen } from "./screens/Documents";
+import { ManageAiScreen } from "./screens/ManageAi";
 import { QuizScreen } from "./screens/Quiz";
 
 // A missing session sends the browser to /login before this resolves.
@@ -18,6 +19,11 @@ function Header() {
       <Link to="/" className="header-title">
         Quizzer
       </Link>
+      {me.isOwner && (
+        <Link to="/manage-ai" className="header-link">
+          AI kezelése
+        </Link>
+      )}
       <span className="header-user">{me.name ?? me.email}</span>
       <a className="header-signout" href="/auth/logout">
         Kijelentkezés
@@ -34,6 +40,7 @@ function App() {
         <Routes>
           <Route path="/" element={<DocumentsScreen />} />
           <Route path="/attempts/:id" element={<QuizScreen />} />
+          <Route path="/manage-ai" element={<ManageAiScreen />} />
           <Route path="*" element={<p>Ez az oldal nem létezik.</p>} />
         </Routes>
       </main>

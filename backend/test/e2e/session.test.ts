@@ -17,6 +17,6 @@ describe("session", () => {
     const u = await newUser();
     const res = await u.get("/me");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: u.id, email: expect.stringContaining("@example.com"), name: "Test" });
+    expect(res.body).toEqual({ id: u.id, email: expect.stringContaining("@example.com"), name: "Test", isOwner: false });
   });
 });

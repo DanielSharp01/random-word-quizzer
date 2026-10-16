@@ -1,4 +1,4 @@
-import { integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { Block } from "../quiz/blanks";
 
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
@@ -18,6 +18,8 @@ export const usersTable = pgTable("users", {
   /** SHA-256 of the token in the invite link; the link itself is never stored. */
   inviteTokenHash: text().unique(),
   inviteExpiresAt: timestamp({ withTimezone: true }),
+  /** Can connect the shared ChatGPT plan and set its limits. */
+  isOwner: boolean().notNull().default(false),
   createdAt: createdAt(),
 });
 
@@ -63,3 +65,41 @@ export const answersTable = pgTable(
   },
   (t) => [primaryKey({ columns: [t.attemptId, t.blank] })],
 );
+
+/**
+ * The owner's ChatGPT plan, shared by everyone's AI requests; a single row. Kept on disconnect,
+ * without tokens, so a later sign-in reuses the registered client and host id.
+ */
+export const aiConnectionTable = pgTable("ai_connection", {
+  id: text().primaryKey().default("chatgpt"),
+  /** Stable per deployment; OpenAI ties the registered client to it. */
+  hostId: text().notNull(),
+  /** The oaiapp_ client issued by the first sign-in. */
+  clientId: text(),
+  /** Access, refresh and ID tokens, sealed with AI_TOKEN_KEY. */
+  sealedTokens: text(),
+  expiresAt: timestamp({ withTimezone: true }),
+  earliestRefreshAt: timestamp({ withTimezone: true }),
+  accountEmail: text(),
+  /** Set when a refresh failed after the access token expired; only a new sign-in clears it. */
+  broken: boolean().notNull().default(false),
+  model: text(),
+  hourlyTokenLimit: integer().notNull().default(50_000),
+  dailyTokenLimit: integer().notNull().default(300_000),
+  maxOutputTokens: integer().notNull().default(2_000),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Tokens used per minute, summed over the last hour and day to enforce the limits. Buckets older
+ * than a day are deleted as new ones are written, so this never holds more than about 1440 rows.
+ */
+export const aiUsageTable = pgTable("ai_usage", {
+  minute: timestamp({ withTimezone: true }).primaryKey(),
+  calls: integer().notNull().default(0),
+  inputTokens: integer().notNull().default(0),
+  outputTokens: integer().notNull().default(0),
+  totalTokens: integer().notNull().default(0),
+  /** Calls cut off before OpenAI reported usage; their counts are estimates. */
+  estimatedCalls: integer().notNull().default(0),
+});

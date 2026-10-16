@@ -1,3 +1,4 @@
+import { aiController } from "./ai.controller";
 import { attemptController } from "./attempt.controller";
 import { authController } from "./auth.controller";
 import { documentController } from "./document.controller";
@@ -10,6 +11,7 @@ export function controllers() {
   meController();
   documentController();
   attemptController();
+  aiController();
   // Make sure this is the last because it needs the registered routes
   swaggerController();
   // After swagger, so the page routes stay out of the API document.

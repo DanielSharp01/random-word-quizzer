@@ -29,6 +29,7 @@ export default defineConfig({
           env: {
             ...testDatabase(),
             API_HOST: "http://localhost:5173",
+            AI_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
             REDIS_URL: process.env.TEST_REDIS_URL ?? `${process.env.REDIS_URL ?? "redis://localhost:6379"}/15`,
           },
           testTimeout: 20_000,

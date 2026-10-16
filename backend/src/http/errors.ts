@@ -1,13 +1,18 @@
 import {
+  BadGateway,
   BadRequest,
   Conflict,
   HttpValidationError,
   isHttpError,
+  ServiceUnavailable,
+  TooManyRequests,
   type HttpError,
   UnprocessableEntity,
 } from "@danielsharp/typeline-http";
 import { authErrorMapper } from "@danielsharp/http-auth";
 import { z } from "zod";
+import { ChatGptError } from "../ai/chatgpt";
+import { AiLimitReached, AiUnavailable, CallbackRejected } from "../ai/connection";
 
 const pgError = z.object({ code: z.string(), constraint: z.string().optional() });
 
@@ -23,6 +28,10 @@ function findPgError(error: unknown) {
 export function mapError(error: unknown): HttpError | undefined {
   const auth = authErrorMapper(error);
   if (auth) return auth;
+  if (error instanceof AiUnavailable) return new ServiceUnavailable({ reason: error.reason });
+  if (error instanceof AiLimitReached) return new TooManyRequests({ window: error.window });
+  if (error instanceof CallbackRejected) return new BadRequest({ reason: error.reason });
+  if (error instanceof ChatGptError) return new BadGateway({ ...(error.code ? { code: error.code } : {}) });
   if (HttpValidationError.is(error)) {
     const issues = error.cause instanceof z.ZodError ? error.cause.issues : undefined;
     return new BadRequest({ source: error.source, ...(issues ? { issues } : {}) });
@@ -48,5 +57,5 @@ export function mapError(error: unknown): HttpError | undefined {
   }
 }
 
-/** Errors the client caused aren't worth a stack trace in the log. */
-export const isExpected = (error: unknown) => isHttpError(error) || mapError(error) !== undefined;
+/** Errors the client caused aren't worth a stack trace in the log; OpenAI failing is worth one. */
+export const isExpected = (error: unknown) => !(error instanceof ChatGptError) && (isHttpError(error) || mapError(error) !== undefined);
