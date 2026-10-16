@@ -14,8 +14,8 @@ import { z } from "zod";
 import { db } from "../providers/db";
 import { blankDocument } from "../quiz/blanks";
 import { readDocx } from "../quiz/docx";
-import { generateQuestions, MAX_SOURCE_CHARS } from "../quiz/questions";
-import { sectionsOf } from "../quiz/sections";
+import { generateQuestions } from "../quiz/questions";
+import { fitsInOneCall, sectionsOf, wholeDocumentSource } from "../quiz/sections";
 import { AttemptRepository } from "../repositories/attempt.repo";
 import { DocumentRepository } from "../repositories/document.repo";
 import { authedRouter } from "../routers";
@@ -100,9 +100,12 @@ export function documentController() {
       .pipe(async ({ auth, params }) => {
         const document = await documents.find(auth.userId, params.id);
         if (!document) throw new NotFound();
-        return { sections: sectionsOf(document.blocks), maxChars: MAX_SOURCE_CHARS };
+        const sections = sectionsOf(document.blocks);
+        // A single section spanning the document would just repeat the whole-document choice.
+        const whole = sections.length === 1 && sections[0]!.fromBlock === 0 && sections[0]!.toBlock === document.blocks.length;
+        return { sections: whole ? [] : sections, wholeIsSampled: !fitsInOneCall(document.blocks) };
       })
-      .pipe(jsonResSend(z.object({ sections: sectionSchema.array(), maxChars: z.int() }), 200)),
+      .pipe(jsonResSend(z.object({ sections: sectionSchema.array(), wholeIsSampled: z.boolean() }), 200)),
   );
 
   r.post("/documents/:id/attempts", (line) =>
@@ -119,13 +122,12 @@ export function documentController() {
           const { id } = await attempts.createBlanks(auth.userId, params.id, seed, settings, answers.length);
           return attemptView(auth.userId, id);
         }
-        const whole = { fromBlock: 0, toBlock: document.blocks.length };
-        const range = body.section === null ? whole : sectionsOf(document.blocks)[body.section];
-        if (!range) throw new BadRequest({ reason: "No such section" });
-        const chars = document.blocks.slice(range.fromBlock, range.toBlock).reduce((sum, b) => sum + b.text.length, 0);
-        if (chars > MAX_SOURCE_CHARS) throw new UnprocessableEntity({ reason: "too_long", maxChars: MAX_SOURCE_CHARS });
-        const questions = await generateQuestions(document.blocks, range.fromBlock, range.toBlock, body.count);
-        const { id } = await attempts.createQuestions(auth.userId, params.id, range.fromBlock, range.toBlock, questions);
+        // The attempt keeps what was asked for; a long document is sent as a sample of its sections.
+        const scope = body.section === null ? { fromBlock: 0, toBlock: document.blocks.length } : sectionsOf(document.blocks)[body.section];
+        if (!scope) throw new BadRequest({ reason: "No such section" });
+        const source = body.section === null ? wholeDocumentSource(document.blocks) : [scope];
+        const questions = await generateQuestions(document.blocks, source, body.count);
+        const { id } = await attempts.createQuestions(auth.userId, params.id, scope.fromBlock, scope.toBlock, questions);
         return attemptView(auth.userId, id);
       })
       .pipe(jsonResSend(attemptSchema, 201)),

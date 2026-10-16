@@ -95,9 +95,6 @@ function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary;
   const [count, setCount] = useState(5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const chosen = section === null ? undefined : sections.data?.sections[section];
-  const chars = chosen?.chars ?? sections.data?.sections.reduce((sum, s) => sum + s.chars, 0) ?? 0;
-  const tooLong = sections.data !== undefined && chars > sections.data.maxChars;
 
   async function start() {
     setBusy(true);
@@ -118,7 +115,7 @@ function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary;
         <label>
           Melyik részből?
           <select value={section ?? ""} onChange={(e) => setSection(e.target.value === "" ? null : Number(e.target.value))}>
-            <option value="">Teljes dokumentum</option>
+            <option value="">{sections.data?.wholeIsSampled ? "Teljes dokumentum (mindig más részekből)" : "Teljes dokumentum"}</option>
             {sections.data?.sections.map((s) => (
               <option key={s.index} value={s.index}>
                 {s.title}
@@ -131,9 +128,11 @@ function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary;
           <input type="number" min={1} max={15} value={count} onChange={(e) => setCount(Number(e.target.value))} />
         </label>
       </div>
-      {tooLong && <p className="error">Ez a rész túl hosszú egyszerre. Válassz egy kisebb fejezetet.</p>}
+      {section === null && sections.data?.wholeIsSampled && (
+        <p className="muted">A dokumentum túl hosszú, hogy egyszerre elküldjük, ezért minden kvíz véletlenszerűen választott fejezetekből kérdez.</p>
+      )}
       <div className="card-footer">
-        <button className="button" disabled={busy || tooLong || sections.isPending} onClick={() => void start()}>
+        <button className="button" disabled={busy || sections.isPending} onClick={() => void start()}>
           {busy ? "Kérdések készülnek…" : "Kérdések készítése"}
         </button>
         {footerEnd}

@@ -60,7 +60,7 @@ export const attemptSchema = z.discriminatedUnion("kind", [
   z.object({
     ...attemptBase,
     kind: z.literal("questions"),
-    /** The heading the questions were written from, or the document title for the whole of it. */
+    /** The section the questions were written from, or "Teljes dokumentum" for the whole of it. */
     section: z.string(),
     questions: questionSchema.array(),
   }),

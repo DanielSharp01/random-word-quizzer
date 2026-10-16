@@ -19,7 +19,7 @@ beforeEach(() => ask.mockReset());
 describe("generateQuestions", () => {
   it("numbers each block in the input and asks for the schema", async () => {
     ask.mockResolvedValue(generated([{ question: "Mi a célja?", answer: "A törvényes végrehajtás.", keyPoints: ["törvényes"], sourceBlock: 1 }]));
-    const questions = await generateQuestions(blocks, 1, 3, 2);
+    const questions = await generateQuestions(blocks, [{ fromBlock: 1, toBlock: 3 }], 2);
 
     expect(questions).toEqual([{ question: "Mi a célja?", answer: "A törvényes végrehajtás.", keyPoints: ["törvényes"], sourceBlock: 1 }]);
     const [request] = ask.mock.calls[0]!;
@@ -36,17 +36,31 @@ describe("generateQuestions", () => {
         { question: "C", answer: "c", keyPoints: ["c"], sourceBlock: 2 },
       ]),
     );
-    expect((await generateQuestions(blocks, 1, 3, 2)).map((q) => [q.question, q.sourceBlock])).toEqual([
+    expect((await generateQuestions(blocks, [{ fromBlock: 1, toBlock: 3 }], 2)).map((q) => [q.question, q.sourceBlock])).toEqual([
       ["A", 1],
       ["B", 2],
     ]);
   });
 
+  it("sends separate runs of blocks apart, and says they come from different places", async () => {
+    ask.mockResolvedValue(generated([{ question: "Q", answer: "a", keyPoints: ["a"], sourceBlock: 1 }]));
+    await generateQuestions(blocks, [{ fromBlock: 0, toBlock: 1 }, { fromBlock: 2, toBlock: 3 }], 1);
+    const [request] = ask.mock.calls[0]!;
+    expect(request.input).toBe("[0] Az ellenőrzés célja\n\n[2] Alapelve a törvényesség és a szakszerűség.");
+    expect(request.instructions).toContain("különböző helyeiről");
+  });
+
+  it("points a question at a block that wasn't sent back at the first one sent", async () => {
+    ask.mockResolvedValue(generated([{ question: "Q", answer: "a", keyPoints: ["a"], sourceBlock: 1 }]));
+    const [question] = await generateQuestions(blocks, [{ fromBlock: 0, toBlock: 1 }, { fromBlock: 2, toBlock: 3 }], 1);
+    expect(question!.sourceBlock).toBe(0);
+  });
+
   it("rejects an answer that isn't the expected JSON, or has no questions", async () => {
     ask.mockResolvedValue({ text: "nem JSON", truncated: false, usage: {} });
-    await expect(generateQuestions(blocks, 0, 3, 2)).rejects.toBeInstanceOf(AiOutputRejected);
+    await expect(generateQuestions(blocks, [{ fromBlock: 0, toBlock: 3 }], 2)).rejects.toBeInstanceOf(AiOutputRejected);
     ask.mockResolvedValue(generated([]));
-    await expect(generateQuestions(blocks, 0, 3, 2)).rejects.toBeInstanceOf(AiOutputRejected);
+    await expect(generateQuestions(blocks, [{ fromBlock: 0, toBlock: 3 }], 2)).rejects.toBeInstanceOf(AiOutputRejected);
   });
 });
 

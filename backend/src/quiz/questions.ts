@@ -1,10 +1,8 @@
 import { z } from "zod";
 import * as ai from "../ai/connection";
 import type { Block } from "./blanks";
+import { MAX_SOURCE_CHARS, type BlockRange } from "./sections";
 import { checkAnswer, type Verdict } from "./check";
-
-/** About 8k tokens of Hungarian; longer passages make for vaguer questions and a costlier call. */
-export const MAX_SOURCE_CHARS = 24_000;
 
 export class AiOutputRejected extends Error {
   constructor() {
@@ -13,9 +11,10 @@ export class AiOutputRejected extends Error {
   }
 }
 
-const generateInstructions = (count: number) =>
+const generateInstructions = (count: number, mixed: boolean) =>
   [
     "Tanulókártyákhoz írsz kérdéseket egy dokumentum részletéből. Minden bekezdés előtt szögletes zárójelben a sorszáma áll.",
+    ...(mixed ? ["A részletek a dokumentum különböző helyeiről valók; a kérdések oszoljanak el köztük."] : []),
     `Írj pontosan ${count} kérdést a részlet legfontosabb fogalmairól, szabályairól és tényeiről.`,
     "Minden kérdésre egy-két mondatban lehessen válaszolni, és csak olyasmire kérdezz, ami a részletből kiderül.",
     "Az answer a helyes válasz egy-két mondatban, a szöveg megfogalmazásához közel.",
@@ -63,17 +62,24 @@ function parse<T>(schema: z.ZodType<T>, text: string): T {
 
 export type GeneratedQuestion = z.infer<typeof generatedSchema>["questions"][number];
 
-/** Questions with their answer key, written from blocks [fromBlock, toBlock). */
-export async function generateQuestions(blocks: Block[], fromBlock: number, toBlock: number, count: number): Promise<GeneratedQuestion[]> {
-  const input = blocks
-    .slice(fromBlock, toBlock)
-    .map((block, i) => `[${fromBlock + i}] ${block.text}`)
-    .join("\n");
-  const { text } = await ai.ask({ instructions: generateInstructions(count), input, format: { name: "questions", schema: generatedJsonSchema } });
+/** Questions with their answer key, written from the given runs of blocks. */
+export async function generateQuestions(blocks: Block[], ranges: BlockRange[], count: number): Promise<GeneratedQuestion[]> {
+  const input = ranges
+    .map(({ fromBlock, toBlock }) =>
+      blocks
+        .slice(fromBlock, toBlock)
+        .map((block, i) => `[${fromBlock + i}] ${block.text}`)
+        .join("\n"),
+    )
+    .join("\n\n")
+    .slice(0, MAX_SOURCE_CHARS);
+  const instructions = generateInstructions(count, ranges.length > 1);
+  const { text } = await ai.ask({ instructions, input, format: { name: "questions", schema: generatedJsonSchema } });
+  const inRange = (block: number) => ranges.some((r) => block >= r.fromBlock && block < r.toBlock);
   const questions = parse(generatedSchema, text)
     .questions.slice(0, count)
-    // A made-up block number would point the feedback at the wrong passage; the section's start is close enough.
-    .map((q) => ({ ...q, sourceBlock: q.sourceBlock >= fromBlock && q.sourceBlock < toBlock ? q.sourceBlock : fromBlock }));
+    // A made-up block number would point the feedback at the wrong passage; the first one sent is close enough.
+    .map((q) => ({ ...q, sourceBlock: inRange(q.sourceBlock) ? q.sourceBlock : ranges[0]!.fromBlock }));
   if (questions.length === 0) throw new AiOutputRejected();
   return questions;
 }

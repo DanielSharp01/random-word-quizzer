@@ -274,7 +274,7 @@ describe("AI questions", () => {
     const documentId = await documentFor(u);
     const { body } = await u.get(`/documents/${documentId}/sections`);
     expect(body.sections.map((s: { title: string }) => s.title)).toEqual(["Az ellenőrzés célja", "Az ellenőrzés alapelvei"]);
-    expect(body.maxChars).toBe(24_000);
+    expect(body.wholeIsSampled).toBe(false);
   });
 
   it("writes questions on the owner's plan for anyone, keeping the key back until answered", async () => {
@@ -284,7 +284,7 @@ describe("AI questions", () => {
 
     const res = await friend.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ kind: "questions", section: "Szabályzat", questions: [{ position: 0, answered: null }, { position: 1, answered: null }] });
+    expect(res.body).toMatchObject({ kind: "questions", section: "Teljes dokumentum", questions: [{ position: 0, answered: null }, { position: 1, answered: null }] });
     expect(JSON.stringify(res.body)).not.toContain("törvényes végrehajtás.");
 
     const [request] = openai.callsTo("/responses");
@@ -348,14 +348,29 @@ describe("AI questions", () => {
     expect((await (await newUser()).get("/attempts")).body.attempts).toEqual([]);
   });
 
-  it("refuses a section too long to send, and says when AI isn't connected", async () => {
+  it("samples sections of a document too long to send whole", async () => {
     await sharedPlan();
     const u = await newUser();
-    const long = await documentFor(u, [{ text: "szó ".repeat(7000) }]);
-    const tooLong = await u.post(`/documents/${long}/attempts`, { kind: "questions", section: null, count: 3 });
-    expect(tooLong.status).toBe(422);
-    expect(tooLong.body).toMatchObject({ reason: "too_long" });
+    // Three sections of about 10 000 characters: only two fit in one call.
+    const long = await documentFor(
+      u,
+      ["Első rész", "Második rész", "Harmadik rész"].flatMap((title) => [{ text: title, style: "Heading1" as const }, { text: `${title} szövege. `.repeat(500) }]),
+    );
+    expect((await u.get(`/documents/${long}/sections`)).body.wholeIsSampled).toBe(true);
 
+    const res = await u.post(`/documents/${long}/attempts`, { kind: "questions", section: null, count: 2 });
+    expect(res.status).toBe(201);
+    expect(res.body.section).toBe("Teljes dokumentum");
+    const request = openai.callsTo("/responses").at(-1)!.json;
+    const sent = request.input[0].content[0].text as string;
+    expect(sent.length).toBeLessThanOrEqual(24_000);
+    expect(sent.split("\n\n")).toHaveLength(2);
+    expect(request.instructions).toContain("különböző helyeiről");
+  });
+
+  it("says when AI isn't set up", async () => {
+    await sharedPlan();
+    const u = await newUser();
     await db.delete(aiConnectionTable);
     const short = await documentFor(u);
     const off = await u.post(`/documents/${short}/attempts`, { kind: "questions", section: null, count: 3 });

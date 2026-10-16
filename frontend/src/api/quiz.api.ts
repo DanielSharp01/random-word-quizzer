@@ -75,7 +75,8 @@ export const getAttempt = (id: string) => api.get<Attempt>(`/attempts/${id}`);
 
 export const postAnswer = (attemptId: string, blank: number, guess: string) => api.post<Answer>(`/attempts/${attemptId}/answers`, { blank, guess });
 
-export const getSections = (documentId: string) => api.get<{ sections: Section[]; maxChars: number }>(`/documents/${documentId}/sections`);
+/** `wholeIsSampled`: the document is too long to send at once, so each attempt draws on random sections. */
+export const getSections = (documentId: string) => api.get<{ sections: Section[]; wholeIsSampled: boolean }>(`/documents/${documentId}/sections`);
 
 export const getHistory = (documentId?: string) =>
   api.get<{ attempts: PastAttempt[] }>(`/attempts${documentId ? `?documentId=${documentId}` : ""}`);

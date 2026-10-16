@@ -42,9 +42,11 @@ export async function attemptView(userId: string, id: string): Promise<z.infer<t
   const attempt = await findAttempt(userId, id);
   const base = { id: attempt.id, documentId: attempt.documentId, title: attempt.title, createdAt: attempt.createdAt };
   if (attempt.kind === "questions") {
+    const whole = attempt.fromBlock === 0 && attempt.toBlock === attempt.blocks.length;
     const section = sectionsOf(attempt.blocks).find((s) => s.fromBlock === attempt.fromBlock && s.toBlock === attempt.toBlock);
     const questions = await attempts.questions(attempt.id);
-    return { ...base, kind: "questions", section: section?.title ?? attempt.title, questions: questions.map((q) => questionView(attempt, q)) };
+    const label = whole ? "Teljes dokumentum" : (section?.title ?? attempt.title);
+    return { ...base, kind: "questions", section: label, questions: questions.map((q) => questionView(attempt, q)) };
   }
   const { blocks, answers } = blanksOf(attempt);
   const given = await attempts.answers(id);
