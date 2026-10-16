@@ -1,10 +1,14 @@
 import { hashToken, issueExpiringToken } from "@danielsharp/auth";
 import type { GoogleIdentity } from "@danielsharp/auth/google";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull } from "drizzle-orm";
+import { env } from "../config/env";
 import { usersTable } from "../db/schema";
 import type { Db, Executor } from "../providers/db";
 
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** INVITE_ORIGIN wins, for when invites are made where API_HOST is a development address. */
+export const inviteLink = (token: string) => `${env.INVITE_ORIGIN ?? env.API_HOST}/auth/invite/${token}`;
 
 function newInvite() {
   const { token, idHash, expiresAt } = issueExpiringToken(INVITE_TTL_MS);
@@ -41,7 +45,7 @@ export class UserRepository {
   async invite(name: string) {
     const { token, ...invite } = newInvite();
     const [user] = await this.db.insert(usersTable).values({ name, ...invite }).returning({ id: usersTable.id });
-    return { id: user!.id, token };
+    return { id: user!.id, token, expiresAt: invite.inviteExpiresAt };
   }
 
   /** A new link for someone who hasn't signed in yet; the old link stops working. */
@@ -52,7 +56,25 @@ export class UserRepository {
       .set(invite)
       .where(and(eq(usersTable.id, userId), isNull(usersTable.googleSub)))
       .returning({ id: usersTable.id });
-    return user && { id: user.id, token };
+    return user && { id: user.id, token, expiresAt: invite.inviteExpiresAt };
+  }
+
+  /** Everyone invited who hasn't signed in yet, expired links included, newest first. */
+  pendingInvites() {
+    return this.db
+      .select({ id: usersTable.id, name: usersTable.name, expiresAt: usersTable.inviteExpiresAt, createdAt: usersTable.createdAt })
+      .from(usersTable)
+      .where(and(isNull(usersTable.googleSub), isNotNull(usersTable.inviteTokenHash)))
+      .orderBy(desc(usersTable.createdAt));
+  }
+
+  /** Removes an invited person who never signed in; someone who has is never touched. */
+  async cancelInvite(userId: string) {
+    const deleted = await this.db
+      .delete(usersTable)
+      .where(and(eq(usersTable.id, userId), isNull(usersTable.googleSub)))
+      .returning({ id: usersTable.id });
+    return deleted.length > 0;
   }
 }
 

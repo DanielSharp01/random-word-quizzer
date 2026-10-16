@@ -274,3 +274,43 @@
   margin-top: 0;
 }
 
+.field-inline,
+.issued-url {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.issued {
+  border-color: var(--accent);
+}
+
+.issued p:first-child {
+  margin-top: 0;
+}
+
+.pendings {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pending:last-child {
+  border-bottom: none;
+}

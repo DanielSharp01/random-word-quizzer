@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { usersTable } from "../../src/db/schema";
 import { db } from "../../src/providers/db";
 import { UserRepository } from "../../src/repositories/user.repo";
-import { anonymous } from "../support/helpers";
+import { anonymous, newUser } from "../support/helpers";
 
 const users = new UserRepository(db);
 const google = (sub = randomUUID()) => ({ sub, email: `${sub}@example.com`, name: "Signed in" }) as Parameters<UserRepository["signInWithGoogle"]>[0];
@@ -73,5 +73,57 @@ describe("invite link", () => {
     const res = await anonymous(`/auth/invite/${randomUUID()}`);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/login?error=invite_expired");
+  });
+});
+
+describe("the owner's invite page", () => {
+  async function newOwner() {
+    const u = await newUser();
+    await db.update(usersTable).set({ isOwner: true }).where(eq(usersTable.id, u.id));
+    return u;
+  }
+
+  it("is only for the owner", async () => {
+    const u = await newUser();
+    expect((await u.post("/invites", { name: "Barát" })).status).toBe(403);
+    expect((await u.get("/invites")).status).toBe(403);
+  });
+
+  it("makes a link that starts sign-in, and lists it until it's used", async () => {
+    const owner = await newOwner();
+    const created = await owner.post("/invites", { name: "  Barát  " });
+    expect(created.status).toBe(201);
+    const url = new URL(created.body.url);
+    expect(url.origin).toBe("http://localhost:5173");
+
+    const res = await anonymous(url.pathname);
+    expect(res.headers.get("location")).toBe("/auth/google/authorize?returnTo=/");
+
+    const listed = (await owner.get("/invites")).body.invites.find((i: { id: string }) => i.id === created.body.id);
+    expect(listed).toMatchObject({ name: "Barát" });
+    expect(new Date(listed.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    await users.signInWithGoogle(google(), url.pathname.split("/").pop());
+    expect((await owner.get("/invites")).body.invites.map((i: { id: string }) => i.id)).not.toContain(created.body.id);
+  });
+
+  it("renews a link, and the old one stops working", async () => {
+    const owner = await newOwner();
+    const { body: first } = await owner.post("/invites", { name: "Lassú" });
+    const renewed = await owner.post(`/invites/${first.id}/renew`);
+    expect(renewed.status).toBe(200);
+    expect(renewed.body.url).not.toBe(first.url);
+    expect((await anonymous(new URL(first.url).pathname)).headers.get("location")).toBe("/login?error=invite_expired");
+  });
+
+  it("cancels an unused invite but never removes someone who signed in", async () => {
+    const owner = await newOwner();
+    const { body } = await owner.post("/invites", { name: "Mégsem" });
+    expect((await owner.delete(`/invites/${body.id}`)).status).toBe(204);
+    expect((await anonymous(new URL(body.url).pathname)).headers.get("location")).toBe("/login?error=invite_expired");
+
+    const member = await newUser();
+    expect((await owner.delete(`/invites/${member.id}`)).status).toBe(404);
+    expect((await member.get("/me")).status).toBe(200);
   });
 });
