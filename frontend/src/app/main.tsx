@@ -1,28 +1,52 @@
-import { useEffect, useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { getMe, type Me } from "../api/me.api";
+import { BrowserRouter, Link, Route, Routes } from "react-router";
 import "../styles.css";
 import "./app.css";
+import { meQuery, queryClient, useMe } from "./queries";
+import { DocumentsScreen } from "./screens/Documents";
+import { QuizScreen } from "./screens/Quiz";
 
-function App() {
-  const [me, setMe] = useState<Me>();
-  const [failed, setFailed] = useState(false);
+// A missing session sends the browser to /login before this resolves.
+void queryClient.prefetchQuery(meQuery);
 
-  // A missing session sends the browser to /login before this resolves.
-  useEffect(() => {
-    getMe().then(setMe, () => setFailed(true));
-  }, []);
-
-  if (failed) return <main className="app">Couldn't load your account. Try reloading.</main>;
-  if (!me) return null;
+function Header() {
+  const me = useMe();
   return (
-    <main className="app">
-      <h1>Hi, {me.name ?? me.email ?? "there"}</h1>
-      <a className="app-signout" href="/auth/logout">
-        Sign out
+    <header className="header">
+      <Link to="/" className="header-title">
+        Quizzer
+      </Link>
+      <span className="header-user">{me.name ?? me.email}</span>
+      <a className="header-signout" href="/auth/logout">
+        Kijelentkezés
       </a>
-    </main>
+    </header>
   );
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+function App() {
+  return (
+    <>
+      <Header />
+      <main className="page">
+        <Routes>
+          <Route path="/" element={<DocumentsScreen />} />
+          <Route path="/attempts/:id" element={<QuizScreen />} />
+          <Route path="*" element={<p>Ez az oldal nem létezik.</p>} />
+        </Routes>
+      </main>
+    </>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <Suspense fallback={<div className="loading" aria-busy />}>
+        <App />
+      </Suspense>
+    </BrowserRouter>
+  </QueryClientProvider>,
+);

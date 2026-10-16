@@ -18,16 +18,23 @@ function testDatabase() {
 
 export default defineConfig({
   test: {
-    // Domain logic is unit-tested in @dash/core. Here, integration tests (repositories, seeds,
-    // constraints) and e2e tests (HTTP endpoints) share one database and the setup that recreates it.
-    include: ["test/integration/**/*.test.ts", "test/e2e/**/*.test.ts"],
-    globalSetup: ["./test/support/globalSetup.ts"],
-    env: {
-      ...testDatabase(),
-      API_HOST: "http://localhost:5173",
-      REDIS_URL: process.env.TEST_REDIS_URL ?? `${process.env.REDIS_URL ?? "redis://localhost:6379"}/15`,
-    },
-    testTimeout: 20_000,
-    hookTimeout: 60_000,
+    projects: [
+      // Pure logic, so it runs without the database or Redis.
+      { test: { name: "unit", include: ["test/unit/**/*.test.ts"] } },
+      {
+        test: {
+          name: "e2e",
+          include: ["test/e2e/**/*.test.ts"],
+          globalSetup: ["./test/support/globalSetup.ts"],
+          env: {
+            ...testDatabase(),
+            API_HOST: "http://localhost:5173",
+            REDIS_URL: process.env.TEST_REDIS_URL ?? `${process.env.REDIS_URL ?? "redis://localhost:6379"}/15`,
+          },
+          testTimeout: 20_000,
+          hookTimeout: 60_000,
+        },
+      },
+    ],
   },
 });

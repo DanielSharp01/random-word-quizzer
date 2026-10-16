@@ -33,13 +33,15 @@ function toLogin(): never {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // fetch sets a FormData body's multipart content type itself, boundary included.
+  const json = body !== undefined && !(body instanceof FormData);
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       method,
       credentials: "same-origin",
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: json ? { "content-type": "application/json" } : undefined,
+      body: json ? JSON.stringify(body) : (body as FormData | undefined),
     });
   } catch {
     throw new OfflineError();
@@ -54,6 +56,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
+  postForm: <T>(path: string, form: FormData) => request<T>("POST", path, form),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
   delete: (path: string) => request<void>("DELETE", path),
 };

@@ -40,10 +40,12 @@ export async function newUser() {
   const { sessionId } = await session.issue({ userId: user!.id, google });
   const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<Res> => {
     const { base } = await start();
+    // fetch sets a FormData body's multipart content type itself, boundary included.
+    const json = body !== undefined && !(body instanceof FormData);
     const res = await fetch(base + path, {
       method,
-      headers: { cookie: `__Host-auth=${sessionId}`, ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      headers: { cookie: `__Host-auth=${sessionId}`, ...(json ? { "content-type": "application/json" } : {}), ...headers },
+      ...(body === undefined ? {} : { body: json ? JSON.stringify(body) : (body as FormData) }),
     });
     const text = await res.text();
     return { status: res.status, body: text ? JSON.parse(text) : undefined, headers: res.headers };
@@ -52,6 +54,7 @@ export async function newUser() {
     id: user!.id,
     get: (path: string, headers?: Record<string, string>) => call("GET", path, undefined, headers),
     post: (path: string, body: unknown = {}) => call("POST", path, body),
+    postForm: (path: string, form: FormData) => call("POST", path, form),
     put: (path: string, body: unknown) => call("PUT", path, body),
     delete: (path: string) => call("DELETE", path),
   };
