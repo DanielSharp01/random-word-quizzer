@@ -1,6 +1,10 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { attemptsTable } from "../../src/db/schema";
+import { db } from "../../src/providers/db";
+import { blankDocument } from "../../src/quiz/blanks";
 import { buildDocx } from "../support/docx";
-import { newUser, type Client } from "../support/helpers";
+import { blanksAttempt, newUser, type Client } from "../support/helpers";
 
 type Segment = { text: string } | { blank: number };
 
@@ -57,7 +61,7 @@ describe("attempts", () => {
   it("blanks words, checks each guess once and reveals the word after", async () => {
     const u = await newUser();
     const { body: doc } = await upload(u);
-    const { status, body: attempt } = await u.post(`/documents/${doc.id}/attempts`, { percent: 60, minLength: 5 });
+    const { status, body: attempt } = await blanksAttempt(u, doc.id, { percent: 60, minLength: 5 });
     expect(status).toBe(201);
     expect(attempt.blankCount).toBeGreaterThan(0);
     expect(JSON.stringify(attempt.blocks)).not.toContain('"answer"');
@@ -79,7 +83,7 @@ describe("attempts", () => {
     const u = await newUser();
     const { body: doc } = await upload(u);
     const { body: document } = await u.get(`/documents/${doc.id}`);
-    const { body: attempt } = await u.post(`/documents/${doc.id}/attempts`, { percent: 60, minLength: 5 });
+    const { body: attempt } = await blanksAttempt(u, doc.id, { percent: 60, minLength: 5 }, 2);
     const words = blankedWords(attempt.blocks, document.blocks);
     expect(words.length).toBeGreaterThanOrEqual(2);
 
@@ -95,5 +99,59 @@ describe("attempts", () => {
     const { body: attempt } = await owner.post(`/documents/${doc.id}/attempts`, {});
     expect((await other.get(`/attempts/${attempt.id}`)).status).toBe(404);
     expect((await other.post(`/attempts/${attempt.id}/answers`, { blank: 0, guess: "x" })).status).toBe(404);
+  });
+});
+
+describe("blanks scopes", () => {
+  async function sectioned(u: Client) {
+    const paragraphs = ["Első fejezet", "Második fejezet", "Harmadik fejezet"].flatMap((title) => [
+      { text: title, style: "Heading1" as const },
+      { text: `A ${title.toLowerCase()} szövege hosszabb mondatokkal, hogy legyen mit kitakarni belőle bőségesen és rendesen.` },
+    ]);
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array(await buildDocx(paragraphs))], "Fejezetek.docx"));
+    return (await u.postForm("/documents", form)).body.id as string;
+  }
+
+  it("blanks one section, named after it", async () => {
+    const u = await newUser();
+    const id = await sectioned(u);
+    const { body } = await u.post(`/documents/${id}/attempts`, { percent: 30, minLength: 4, scope: { kind: "section", index: 1 } });
+    expect(body.scope).toBe("Második fejezet");
+    expect(body.blocks).toHaveLength(2);
+    expect(JSON.stringify(body.blocks)).not.toContain("Első");
+  });
+
+  it("blanks a number of random sections in document order, marking the gaps", async () => {
+    const u = await newUser();
+    const id = await sectioned(u);
+    for (let i = 0; i < 10; i++) {
+      const { body } = await u.post(`/documents/${id}/attempts`, { percent: 30, minLength: 4, scope: { kind: "random", count: 2 } });
+      expect(body.scope).toBe("2 véletlenszerű fejezet");
+      expect(body.blocks).toHaveLength(4);
+      // Only sections 1 and 3 leave text out between them.
+      const gaps = body.blocks.filter((b: { gapBefore?: boolean }) => b.gapBefore).length;
+      expect(gaps).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("reports the counts the page estimates blanks from", async () => {
+    const u = await newUser();
+    const id = await sectioned(u);
+    const { body } = await u.get(`/documents/${id}/sections`);
+    expect(body.sections).toHaveLength(3);
+    expect(body.blankStats.total).toBeGreaterThan(0);
+    expect(body.sections[0].blankStats.candidates.length).toBe(31);
+  });
+
+  it("keeps an attempt made before rules 2 on its original blanks", async () => {
+    const u = await newUser();
+    const { body: doc } = await upload(u);
+    const { body: attempt } = await u.post(`/documents/${doc.id}/attempts`, { percent: 40, minLength: 4 });
+    await db.update(attemptsTable).set({ blankRules: null }).where(eq(attemptsTable.id, attempt.id));
+    const { body: document } = await u.get(`/documents/${doc.id}`);
+    const [row] = await db.select().from(attemptsTable).where(eq(attemptsTable.id, attempt.id));
+    const original = blankDocument(document.blocks, { percent: 40, minLength: 4 }, row!.seed!, 1);
+    expect((await u.get(`/attempts/${attempt.id}`)).body.blankCount).toBe(original.answers.length);
   });
 });

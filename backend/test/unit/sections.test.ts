@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Block } from "../../src/quiz/blanks";
-import { looksLikeTitle, sectionsOf, wholeDocumentSource } from "../../src/quiz/sections";
+import { looksLikeTitle, randomSections, sectionsOf, wholeDocumentSource } from "../../src/quiz/sections";
 
 const p = (text: string): Block => ({ kind: "paragraph", text });
 const h = (text: string): Block => ({ kind: "heading", text });
@@ -27,8 +27,8 @@ describe("looksLikeTitle", () => {
 describe("sectionsOf", () => {
   it("splits at Word headings when the document has them, each running to the next", () => {
     expect(sectionsOf([h("Célja"), p("abc"), p("de"), h("Alapelvei"), p("f")])).toEqual([
-      { index: 0, title: "Célja", fromBlock: 0, toBlock: 3, chars: 10 },
-      { index: 1, title: "Alapelvei", fromBlock: 3, toBlock: 5, chars: 10 },
+      { index: 0, title: "Célja", titled: true, fromBlock: 0, toBlock: 3, chars: 10 },
+      { index: 1, title: "Alapelvei", titled: true, fromBlock: 3, toBlock: 5, chars: 10 },
     ]);
   });
 
@@ -54,8 +54,13 @@ describe("sectionsOf", () => {
     ]);
   });
 
-  it("calls the text of a document without any titles just that", () => {
-    expect(titles([p("a."), p("b.")])).toEqual(["Szöveg"]);
+  it("calls the text of a document without any titles just that, with no title block to show", () => {
+    expect(sectionsOf([p("a."), p("b.")]).map((s) => [s.title, s.titled])).toEqual([["Szöveg", false]]);
+  });
+
+  it("marks only the first part of a cut section as starting with its title", () => {
+    const blocks = [h("Hosszú"), p("x".repeat(40)), p("y".repeat(40)), p("z".repeat(40))];
+    expect(sectionsOf(blocks, 90).map((s) => s.titled)).toEqual([true, false]);
   });
 
   it("cuts a section too long for one call into numbered parts", () => {
@@ -92,5 +97,22 @@ describe("wholeDocumentSource", () => {
 
   it("still sends something when a single paragraph is over the budget", () => {
     expect(wholeDocumentSource([p("x".repeat(500))], Math.random, 100)).toEqual([{ fromBlock: 0, toBlock: 1 }]);
+  });
+});
+
+describe("randomSections", () => {
+  const blocks = [h("A"), p("a"), h("B"), p("b"), h("C"), p("c"), h("D"), p("d")];
+
+  it("picks that many different sections, in document order", () => {
+    const keys = [0.9, 0.1, 0.5, 0.3];
+    let i = 0;
+    expect(randomSections(blocks, 2, () => keys[i++]!)).toEqual([
+      { fromBlock: 2, toBlock: 4 },
+      { fromBlock: 6, toBlock: 8 },
+    ]);
+  });
+
+  it("picks all of them when asked for more than there are", () => {
+    expect(randomSections(blocks, 10)).toHaveLength(4);
   });
 });

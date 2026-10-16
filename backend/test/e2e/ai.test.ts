@@ -5,7 +5,7 @@ import { aiConnectionTable, aiUsageTable, usersTable } from "../../src/db/schema
 import { db } from "../../src/providers/db";
 import { buildDocx } from "../support/docx";
 import { fakeOpenAI } from "../support/fake-openai";
-import { newUser, type Client } from "../support/helpers";
+import { blanksAttempt, newUser, type Client } from "../support/helpers";
 
 let openai: ReturnType<typeof fakeOpenAI>;
 
@@ -334,7 +334,7 @@ describe("AI questions", () => {
     await sharedPlan();
     const u = await newUser();
     const documentId = await documentFor(u);
-    const { body: blanks } = await u.post(`/documents/${documentId}/attempts`, { percent: 60, minLength: 4 });
+    const { body: blanks } = await blanksAttempt(u, documentId, { percent: 60, minLength: 4 });
     await u.post(`/attempts/${blanks.id}/answers`, { blank: 0, guess: "" });
     const { body: questions } = await u.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
     await u.post(`/attempts/${questions.id}/questions/0/answer`, { answer: "A feladatok törvényes végrehajtása." });

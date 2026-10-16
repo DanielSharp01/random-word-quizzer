@@ -1,9 +1,10 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm";
 import { answersTable, attemptsTable, documentsTable, questionsTable } from "../db/schema";
 import type { Executor } from "../providers/db";
-import type { BlankSettings } from "../quiz/blanks";
+import { CURRENT_BLANK_RULES, type BlankSettings } from "../quiz/blanks";
 import type { Checked, Verdict } from "../quiz/check";
 import type { Evaluation, GeneratedQuestion } from "../quiz/questions";
+import type { BlockRange } from "../quiz/sections";
 
 export type Score = Record<Verdict, number>;
 
@@ -12,10 +13,17 @@ const emptyScore = (): Score => ({ correct: 0, almost: 0, wrong: 0 });
 export class AttemptRepository {
   constructor(private db: Executor) {}
 
-  async createBlanks(userId: string, documentId: string, seed: number, settings: BlankSettings, itemCount: number) {
+  async createBlanks(
+    userId: string,
+    documentId: string,
+    seed: number,
+    settings: BlankSettings,
+    scope: { ranges: BlockRange[] | null; label: string | null },
+    itemCount: number,
+  ) {
     const [attempt] = await this.db
       .insert(attemptsTable)
-      .values({ userId, documentId, kind: "blanks", seed, ...settings, itemCount })
+      .values({ userId, documentId, kind: "blanks", seed, ...settings, ranges: scope.ranges, scopeLabel: scope.label, blankRules: CURRENT_BLANK_RULES, itemCount })
       .returning({ id: attemptsTable.id });
     return attempt!;
   }
@@ -46,6 +54,9 @@ export class AttemptRepository {
         minLength: attemptsTable.minLength,
         fromBlock: attemptsTable.fromBlock,
         toBlock: attemptsTable.toBlock,
+        ranges: attemptsTable.ranges,
+        scopeLabel: attemptsTable.scopeLabel,
+        blankRules: attemptsTable.blankRules,
         createdAt: attemptsTable.createdAt,
       })
       .from(attemptsTable)

@@ -69,3 +69,15 @@ export async function anonymous(path: string, headers: Record<string, string> = 
 }
 
 export const uuid = () => randomUUID();
+
+/**
+ * A blanks attempt with at least `atLeast` blanks. Blanks are random and the test documents short,
+ * so an unlucky draw can have fewer; a new attempt is drawn until one has enough.
+ */
+export async function blanksAttempt(u: Client, documentId: string, settings: Record<string, unknown>, atLeast = 1) {
+  for (let i = 0; i < 30; i++) {
+    const res = await u.post(`/documents/${documentId}/attempts`, settings);
+    if (res.status !== 201 || res.body.blankCount >= atLeast) return res;
+  }
+  throw new Error(`No attempt with ${atLeast} blanks in 30 draws`);
+}

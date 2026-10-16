@@ -3,7 +3,8 @@ import type { Block } from "./blanks";
 /** About 8k tokens of Hungarian; longer passages make for vaguer questions and a costlier call. */
 export const MAX_SOURCE_CHARS = 24_000;
 
-export type Section = { index: number; title: string; fromBlock: number; toBlock: number; chars: number };
+/** `titled`: the section starts with its title block, which a page can show as a heading. */
+export type Section = { index: number; title: string; titled: boolean; fromBlock: number; toBlock: number; chars: number };
 
 /**
  * For documents without Word heading styles, like regulations typed as plain paragraphs: a title is
@@ -56,11 +57,13 @@ export function sectionsOf(blocks: Block[], max = MAX_SOURCE_CHARS): Section[] {
     .filter((s) => s.toBlock - s.fromBlock > 1 || !isTitle(blocks[s.fromBlock]!))
     .flatMap(({ fromBlock, toBlock }) => {
       const first = blocks[fromBlock]!;
-      const title = isTitle(first) ? first.text : starts.length > 1 ? "Bevezető" : "Szöveg";
+      const titled = isTitle(first);
+      const title = titled ? first.text : starts.length > 1 ? "Bevezető" : "Szöveg";
       const parts = split(blocks, fromBlock, toBlock, max);
       return parts.map((part, i) => ({
         ...part,
         title: parts.length === 1 ? title : `${title} (${i + 1}. rész, ${paragraphs(part)})`,
+        titled: titled && i === 0,
       }));
     });
   return sections.map((s, index) => ({ index, ...s, chars: charsOf(blocks, s.fromBlock, s.toBlock) }));
@@ -90,4 +93,15 @@ export function wholeDocumentSource(blocks: Block[], random: () => number = Math
   // Only a single paragraph longer than the budget leaves nothing picked; it gets cut when sent.
   if (picked.length === 0) picked.push(shuffled[0]!);
   return picked.sort((a, b) => a.fromBlock - b.fromBlock).map(({ fromBlock, toBlock }) => ({ fromBlock, toBlock }));
+}
+
+/** `count` different sections picked at random, in document order. */
+export function randomSections(blocks: Block[], count: number, random: () => number = Math.random): BlockRange[] {
+  return sectionsOf(blocks)
+    .map((section) => ({ section, key: random() }))
+    .sort((a, b) => a.key - b.key)
+    .slice(0, count)
+    .map(({ section }) => section)
+    .sort((a, b) => a.fromBlock - b.fromBlock)
+    .map(({ fromBlock, toBlock }) => ({ fromBlock, toBlock }));
 }

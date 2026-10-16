@@ -1,7 +1,7 @@
 import { BadRequest, Conflict, jsonResSend, NotFound, validateBody, validateParams, validateQuery } from "@danielsharp/typeline-http";
 import { z } from "zod";
 import { db } from "../providers/db";
-import { blankDocument } from "../quiz/blanks";
+import { blankScope } from "../quiz/blank-scope";
 import { checkAnswer } from "../quiz/check";
 import { evaluateAnswer } from "../quiz/questions";
 import { sectionsOf } from "../quiz/sections";
@@ -20,7 +20,7 @@ async function findAttempt(userId: string, id: string, kind?: FoundAttempt["kind
 }
 
 const blanksOf = (attempt: FoundAttempt) =>
-  blankDocument(attempt.blocks, { percent: attempt.percent!, minLength: attempt.minLength! }, attempt.seed!);
+  blankScope(attempt.blocks, attempt.ranges, { percent: attempt.percent!, minLength: attempt.minLength! }, attempt.seed!, attempt.blankRules === 2 ? 2 : 1);
 
 const sourceOf = (attempt: FoundAttempt, block: number) => attempt.blocks[block]?.text ?? "";
 
@@ -53,6 +53,7 @@ export async function attemptView(userId: string, id: string): Promise<z.infer<t
   return {
     ...base,
     kind: "blanks",
+    scope: attempt.scopeLabel ?? "Teljes dokumentum",
     percent: attempt.percent!,
     minLength: attempt.minLength!,
     blankCount: answers.length,

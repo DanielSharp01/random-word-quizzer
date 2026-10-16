@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Answer, BlanksAttempt, Question, QuestionsAttempt, Segment, Verdict } from "../../api/quiz.api";
 import { aiErrorText } from "../aiErrors";
@@ -79,15 +79,28 @@ function BlanksQuiz({ attempt }: { attempt: BlanksAttempt }) {
   const answers = new Map(attempt.answers.map((a) => [a.blank, a]));
   return (
     <>
+      <p className="muted">Ebből: {attempt.scope}</p>
       <Score answered={attempt.answers.length} total={attempt.blankCount} verdicts={attempt.answers.map((a) => a.verdict)} />
       <p className="muted">Írd be a hiányzó szót, és nyomj Entert. Az ékezet- és kisebb elírásokat „majdnem” jónak számoljuk.</p>
       {attempt.blocks.map((block, i) => {
         const content = <Segments attempt={attempt} segments={block.segments} answers={answers} />;
-        if (block.kind === "heading") return <h2 key={i}>{content}</h2>;
-        return (
-          <p key={i} className={block.kind === "listItem" ? "quiz-item" : undefined}>
-            {content}
+        const gap = block.gapBefore && (
+          <p className="quiz-gap" aria-label="Kihagyott szöveg">
+            …
           </p>
+        );
+        if (block.kind === "heading")
+          return (
+            <Fragment key={i}>
+              {gap}
+              <h2>{content}</h2>
+            </Fragment>
+          );
+        return (
+          <Fragment key={i}>
+            {gap}
+            <p className={block.kind === "listItem" ? "quiz-item" : undefined}>{content}</p>
+          </Fragment>
         );
       })}
     </>

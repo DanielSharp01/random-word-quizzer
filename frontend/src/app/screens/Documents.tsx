@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ApiError } from "../../api/client";
-import { getSections, type DocumentSummary } from "../../api/quiz.api";
+import { getSections, type BlanksScope, type BlankStats, type DocumentSummary } from "../../api/quiz.api";
 import { aiErrorText } from "../aiErrors";
+import { estimateBlanks } from "../estimate";
+import { Picker, type PickerOption } from "../ui/Picker";
 import { deleteDocument, startAttempt, uploadDocument, useDocuments } from "../queries";
 
 function uploadError(error: unknown) {
@@ -48,16 +50,47 @@ function Upload() {
   );
 }
 
+/** Above this many blanks a quiz turns into an afternoon; the page says so before starting it. */
+const MANY_BLANKS = 150;
+
+const useSections = (documentId: string) => useQuery({ queryKey: ["sections", documentId], queryFn: () => getSections(documentId) });
+
 function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; footerEnd: ReactNode }) {
   const navigate = useNavigate();
+  const sections = useSections(document.id);
+  const [part, setPart] = useState("random");
+  const [randomCount, setRandomCount] = useState(3);
   const [percent, setPercent] = useState(20);
   const [minLength, setMinLength] = useState(6);
   const [busy, setBusy] = useState(false);
 
+  const list = sections.data?.sections ?? [];
+  const hasSections = list.length > 1;
+  const chosen = hasSections ? part : "document";
+  const estimate = (stats: BlankStats) => estimateBlanks(stats, percent, minLength);
+  const perSection = list.length > 0 ? list.reduce((sum, s) => sum + estimate(s.blankStats), 0) / list.length : 0;
+  const count = Math.min(randomCount, list.length);
+  const estimated =
+    !sections.data
+      ? undefined
+      : chosen === "document"
+        ? estimate(sections.data.blankStats)
+        : chosen === "random"
+          ? Math.round(perSection * count)
+          : estimate(list[Number(chosen)]!.blankStats);
+
+  const options: PickerOption[] = [
+    ...(hasSections ? [{ key: "random", label: "Véletlenszerű fejezetek", detail: "Minden kvíz más fejezetekből" }] : []),
+    { key: "document", label: "Teljes dokumentum", detail: sections.data ? `kb. ${estimate(sections.data.blankStats)} kitakart szó` : undefined },
+    ...list.map((s, i) => ({ key: String(s.index), label: s.title, detail: `kb. ${estimate(s.blankStats)} kitakart szó`, separated: i === 0 })),
+  ];
+
   async function start() {
     setBusy(true);
     try {
-      const attempt = await startAttempt(document.id, { percent, minLength });
+      const scope: BlanksScope =
+        chosen === "document" ? { kind: "document" } : chosen === "random" ? { kind: "random", count: randomCount } : { kind: "section", index: Number(chosen) };
+      const attempt = await startAttempt(document.id, { percent, minLength, scope });
       navigate(`/attempts/${attempt.id}`);
     } finally {
       setBusy(false);
@@ -67,6 +100,13 @@ function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; fo
   return (
     <>
       <div className="fields">
+        <Picker label="Melyik részből?" options={options} value={chosen} onChange={setPart} />
+        {chosen === "random" && (
+          <label>
+            Hány fejezet?
+            <input type="number" min={1} max={Math.min(20, list.length)} value={randomCount} onChange={(e) => setRandomCount(Number(e.target.value))} />
+          </label>
+        )}
         <label>
           Kitakart szavak aránya
           <span className="input-suffix">
@@ -78,8 +118,16 @@ function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; fo
           <input type="number" min={1} max={20} value={minLength} onChange={(e) => setMinLength(Number(e.target.value))} />
         </label>
       </div>
+      {estimated !== undefined &&
+        (estimated > MANY_BLANKS ? (
+          <p className="notice">
+            Ez nagyon hosszú lesz: kb. {estimated} kitakart szó egy oldalon. Érdemes egy fejezetet vagy néhány véletlenszerű fejezetet választani.
+          </p>
+        ) : (
+          <p className="estimate">Kb. {estimated} kitakart szó.</p>
+        ))}
       <div className="card-footer">
-        <button className="button" disabled={busy} onClick={() => void start()}>
+        <button className="button" disabled={busy || sections.isPending} onClick={() => void start()}>
           Kvíz indítása
         </button>
         {footerEnd}
@@ -90,17 +138,24 @@ function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; fo
 
 function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary; footerEnd: ReactNode }) {
   const navigate = useNavigate();
-  const sections = useQuery({ queryKey: ["sections", document.id], queryFn: () => getSections(document.id) });
-  const [section, setSection] = useState<number | null>(null);
+  const sections = useSections(document.id);
+  const [part, setPart] = useState("document");
   const [count, setCount] = useState(5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const list = sections.data?.sections ?? [];
+  const sampled = sections.data?.wholeIsSampled ?? false;
+
+  const options: PickerOption[] = [
+    { key: "document", label: "Teljes dokumentum", detail: sampled ? "Hosszú, ezért mindig más részekből kérdez" : `${document.blockCount} bekezdés` },
+    ...list.map((s, i) => ({ key: String(s.index), label: s.title, detail: `${s.toBlock - s.fromBlock} bekezdés`, separated: i === 0 })),
+  ];
 
   async function start() {
     setBusy(true);
     setError(undefined);
     try {
-      const attempt = await startAttempt(document.id, { kind: "questions", section, count });
+      const attempt = await startAttempt(document.id, { kind: "questions", section: part === "document" ? null : Number(part), count });
       navigate(`/attempts/${attempt.id}`);
     } catch (e) {
       setError(aiErrorText(e));
@@ -112,25 +167,12 @@ function QuestionsSettings({ document, footerEnd }: { document: DocumentSummary;
   return (
     <>
       <div className="fields">
-        <label>
-          Melyik részből?
-          <select value={section ?? ""} onChange={(e) => setSection(e.target.value === "" ? null : Number(e.target.value))}>
-            <option value="">{sections.data?.wholeIsSampled ? "Teljes dokumentum (mindig más részekből)" : "Teljes dokumentum"}</option>
-            {sections.data?.sections.map((s) => (
-              <option key={s.index} value={s.index}>
-                {s.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Picker label="Melyik részből?" options={options} value={part} onChange={setPart} />
         <label>
           Kérdések száma
           <input type="number" min={1} max={15} value={count} onChange={(e) => setCount(Number(e.target.value))} />
         </label>
       </div>
-      {section === null && sections.data?.wholeIsSampled && (
-        <p className="muted">A dokumentum túl hosszú, hogy egyszerre elküldjük, ezért minden kvíz véletlenszerűen választott fejezetekből kérdez.</p>
-      )}
       <div className="card-footer">
         <button className="button" disabled={busy || sections.isPending} onClick={() => void start()}>
           {busy ? "Kérdések készülnek…" : "Kérdések készítése"}

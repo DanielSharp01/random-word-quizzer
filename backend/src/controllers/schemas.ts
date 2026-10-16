@@ -14,7 +14,21 @@ export const documentSummarySchema = z.object({
   createdAt: z.date(),
 });
 
-export const sectionSchema = z.object({ index: z.int(), title: z.string(), fromBlock: z.int(), toBlock: z.int(), chars: z.int() });
+/**
+ * For estimating blanks on the page: `candidates[n]` words of n letters the blanking rules could pick
+ * (the last slot n or more), and `total` words.
+ */
+export const blankStatsSchema = z.object({ candidates: z.int().array(), total: z.int() });
+
+export const sectionSchema = z.object({
+  index: z.int(),
+  title: z.string(),
+  titled: z.boolean(),
+  fromBlock: z.int(),
+  toBlock: z.int(),
+  chars: z.int(),
+  blankStats: blankStatsSchema,
+});
 
 const segmentSchema = z.union([z.object({ text: z.string() }), z.object({ blank: z.int(), length: z.int() })]);
 
@@ -51,10 +65,13 @@ export const attemptSchema = z.discriminatedUnion("kind", [
   z.object({
     ...attemptBase,
     kind: z.literal("blanks"),
+    /** Which part of the document: "Teljes dokumentum", a section's title, or how many random sections. */
+    scope: z.string(),
     percent: z.int(),
     minLength: z.int(),
     blankCount: z.int(),
-    blocks: z.object({ kind: blockKindSchema, segments: segmentSchema.array() }).array(),
+    /** `gapBefore`: text was skipped between this block and the one before it. */
+    blocks: z.object({ kind: blockKindSchema, segments: segmentSchema.array(), gapBefore: z.literal(true).optional() }).array(),
     answers: answerSchema.array(),
   }),
   z.object({

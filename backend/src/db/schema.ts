@@ -1,5 +1,6 @@
 import { boolean, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { Block } from "../quiz/blanks";
+import type { BlockRange } from "../quiz/sections";
 
 const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow();
 
@@ -57,6 +58,12 @@ export const attemptsTable = pgTable("attempts", {
   /** The blocks a questions attempt was generated from, end exclusive. */
   fromBlock: integer(),
   toBlock: integer(),
+  /** The parts a blanks attempt covers; missing means the whole document. */
+  ranges: jsonb().$type<BlockRange[]>(),
+  /** How a blanks attempt chose its parts, kept to name it: a section's title or a count of random ones. */
+  scopeLabel: text(),
+  /** The rules that picked a blanks attempt's blanks; missing means 1, from before rules were versioned. */
+  blankRules: integer(),
   /** Blanks or questions in the attempt; missing on blanks attempts made before it was stored. */
   itemCount: integer(),
   createdAt: createdAt(),

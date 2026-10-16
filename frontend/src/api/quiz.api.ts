@@ -34,10 +34,12 @@ type AttemptBase = { id: string; documentId: string; title: string; createdAt: s
 
 export type BlanksAttempt = AttemptBase & {
   kind: "blanks";
+  scope: string;
   percent: number;
   minLength: number;
   blankCount: number;
-  blocks: { kind: BlockKind; segments: Segment[] }[];
+  /** `gapBefore`: text was skipped between this block and the one before it. */
+  blocks: { kind: BlockKind; segments: Segment[]; gapBefore?: true }[];
   answers: Answer[];
 };
 
@@ -45,9 +47,16 @@ export type QuestionsAttempt = AttemptBase & { kind: "questions"; section: strin
 
 export type Attempt = BlanksAttempt | QuestionsAttempt;
 
-export type AttemptSettings = { kind?: "blanks"; percent: number; minLength: number } | { kind: "questions"; section: number | null; count: number };
+export type BlanksScope = { kind: "document" } | { kind: "section"; index: number } | { kind: "random"; count: number };
 
-export type Section = { index: number; title: string; fromBlock: number; toBlock: number; chars: number };
+export type AttemptSettings =
+  | { kind?: "blanks"; percent: number; minLength: number; scope: BlanksScope }
+  | { kind: "questions"; section: number | null; count: number };
+
+/** `candidates[n]`: words of n letters the blanking rules could pick (the last slot: n or more). */
+export type BlankStats = { candidates: number[]; total: number };
+
+export type Section = { index: number; title: string; titled: boolean; fromBlock: number; toBlock: number; chars: number; blankStats: BlankStats };
 
 export type PastAttempt = {
   id: string;
@@ -76,7 +85,8 @@ export const getAttempt = (id: string) => api.get<Attempt>(`/attempts/${id}`);
 export const postAnswer = (attemptId: string, blank: number, guess: string) => api.post<Answer>(`/attempts/${attemptId}/answers`, { blank, guess });
 
 /** `wholeIsSampled`: the document is too long to send at once, so each attempt draws on random sections. */
-export const getSections = (documentId: string) => api.get<{ sections: Section[]; wholeIsSampled: boolean }>(`/documents/${documentId}/sections`);
+export const getSections = (documentId: string) =>
+  api.get<{ sections: Section[]; wholeIsSampled: boolean; blankStats: BlankStats }>(`/documents/${documentId}/sections`);
 
 export const getHistory = (documentId?: string) =>
   api.get<{ attempts: PastAttempt[] }>(`/attempts${documentId ? `?documentId=${documentId}` : ""}`);

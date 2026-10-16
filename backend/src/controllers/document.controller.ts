@@ -12,15 +12,17 @@ import {
 } from "@danielsharp/typeline-http";
 import { z } from "zod";
 import { db } from "../providers/db";
-import { blankDocument } from "../quiz/blanks";
+import type { Block } from "../quiz/blanks";
+import { blankScope } from "../quiz/blank-scope";
+import { blankStats, CURRENT_BLANK_RULES } from "../quiz/blanks";
 import { readDocx } from "../quiz/docx";
 import { generateQuestions } from "../quiz/questions";
-import { fitsInOneCall, sectionsOf, wholeDocumentSource } from "../quiz/sections";
+import { fitsInOneCall, randomSections, sectionsOf, wholeDocumentSource, type BlockRange } from "../quiz/sections";
 import { AttemptRepository } from "../repositories/attempt.repo";
 import { DocumentRepository } from "../repositories/document.repo";
 import { authedRouter } from "../routers";
 import { attemptView } from "./attempt.controller";
-import { attemptSchema, blockSchema, documentSummarySchema, idParams, sectionSchema } from "./schemas";
+import { attemptSchema, blankStatsSchema, blockSchema, documentSummarySchema, idParams, sectionSchema } from "./schemas";
 
 const documents = new DocumentRepository(db);
 const attempts = new AttemptRepository(db);
@@ -40,6 +42,13 @@ const attemptSettingsSchema = z.union([
     kind: z.literal("blanks").default("blanks"),
     percent: z.int().min(5).max(60).default(20),
     minLength: z.int().min(1).max(20).default(6),
+    scope: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("document") }),
+        z.object({ kind: z.literal("section"), index: z.int().min(0) }),
+        z.object({ kind: z.literal("random"), count: z.int().min(1).max(20) }),
+      ])
+      .default({ kind: "document" }),
   }),
 ]);
 
@@ -49,6 +58,19 @@ async function blocksOf(file: File) {
   } catch {
     throw new UnprocessableEntity({ reason: "Not a readable .docx file" });
   }
+}
+
+type BlanksScope = { kind: "document" } | { kind: "section"; index: number } | { kind: "random"; count: number };
+
+function blanksScope(blocks: Block[], scope: BlanksScope): { ranges: BlockRange[] | null; label: string | null } {
+  if (scope.kind === "document") return { ranges: null, label: null };
+  if (scope.kind === "random") {
+    const ranges = randomSections(blocks, scope.count);
+    return { ranges, label: `${ranges.length} véletlenszerű fejezet` };
+  }
+  const section = sectionsOf(blocks)[scope.index];
+  if (!section) throw new BadRequest({ reason: "No such section" });
+  return { ranges: [{ fromBlock: section.fromBlock, toBlock: section.toBlock }], label: section.title };
 }
 
 export function documentController() {
@@ -103,9 +125,13 @@ export function documentController() {
         const sections = sectionsOf(document.blocks);
         // A single section spanning the document would just repeat the whole-document choice.
         const whole = sections.length === 1 && sections[0]!.fromBlock === 0 && sections[0]!.toBlock === document.blocks.length;
-        return { sections: whole ? [] : sections, wholeIsSampled: !fitsInOneCall(document.blocks) };
+        return {
+          sections: (whole ? [] : sections).map((s) => ({ ...s, blankStats: blankStats(document.blocks.slice(s.fromBlock, s.toBlock)) })),
+          wholeIsSampled: !fitsInOneCall(document.blocks),
+          blankStats: blankStats(document.blocks),
+        };
       })
-      .pipe(jsonResSend(z.object({ sections: sectionSchema.array(), wholeIsSampled: z.boolean() }), 200)),
+      .pipe(jsonResSend(z.object({ sections: sectionSchema.array(), wholeIsSampled: z.boolean(), blankStats: blankStatsSchema }), 200)),
   );
 
   r.post("/documents/:id/attempts", (line) =>
@@ -117,9 +143,10 @@ export function documentController() {
         if (!document) throw new NotFound();
         if (body.kind === "blanks") {
           const settings = { percent: body.percent, minLength: body.minLength };
+          const scope = blanksScope(document.blocks, body.scope);
           const seed = randomInt(2 ** 31);
-          const { answers } = blankDocument(document.blocks, settings, seed);
-          const { id } = await attempts.createBlanks(auth.userId, params.id, seed, settings, answers.length);
+          const { answers } = blankScope(document.blocks, scope.ranges, settings, seed, CURRENT_BLANK_RULES);
+          const { id } = await attempts.createBlanks(auth.userId, params.id, seed, settings, scope, answers.length);
           return attemptView(auth.userId, id);
         }
         // The attempt keeps what was asked for; a long document is sent as a sample of its sections.
