@@ -1,0 +1,11 @@
+packages:
+  - backend
+  - frontend
+allowBuilds:
+  '@scarf/scarf': false
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@danielsharp/zod@0.2.0'
+  - '@danielsharp/typeline-http@0.2.0'
+  - '@danielsharp/auth@0.2.0'
+  - '@danielsharp/http-auth@0.2.0'

@@ -1,0 +1,52 @@
+import {
+  BadRequest,
+  Conflict,
+  HttpValidationError,
+  isHttpError,
+  type HttpError,
+  UnprocessableEntity,
+} from "@danielsharp/typeline-http";
+import { authErrorMapper } from "@danielsharp/http-auth";
+import { z } from "zod";
+
+const pgError = z.object({ code: z.string(), constraint: z.string().optional() });
+
+/** Drizzle wraps driver errors, so the Postgres one may sit on `cause`. */
+function findPgError(error: unknown) {
+  for (let e: unknown = error, depth = 0; e && depth < 3; e = (e as { cause?: unknown }).cause, depth++) {
+    const parsed = pgError.safeParse(e);
+    if (parsed.success && /^[0-9A-Z]{5}$/.test(parsed.data.code)) return parsed.data;
+  }
+  return undefined;
+}
+
+export function mapError(error: unknown): HttpError | undefined {
+  const auth = authErrorMapper(error);
+  if (auth) return auth;
+  if (HttpValidationError.is(error)) {
+    const issues = error.cause instanceof z.ZodError ? error.cause.issues : undefined;
+    return new BadRequest({ source: error.source, ...(issues ? { issues } : {}) });
+  }
+  const pg = findPgError(error);
+  if (!pg) return undefined;
+  const constraint = pg.constraint ? { constraint: pg.constraint } : {};
+  switch (pg.code) {
+    case "23505":
+      return new Conflict({ reason: "Already exists", ...constraint });
+    case "23503":
+      return new UnprocessableEntity({ reason: "Refers to a row that doesn't exist or is still in use", ...constraint });
+    case "23514":
+    case "23502":
+      return new UnprocessableEntity({ reason: "Breaks a data rule", ...constraint });
+    case "22007":
+    case "22008":
+    case "22P02":
+    case "22003":
+      return new BadRequest({ reason: "Value out of range" });
+    default:
+      return undefined;
+  }
+}
+
+/** Errors the client caused aren't worth a stack trace in the log. */
+export const isExpected = (error: unknown) => isHttpError(error) || mapError(error) !== undefined;

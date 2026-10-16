@@ -1,0 +1,40 @@
+{
+  "name": "backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "check": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.cli.ts",
+    "invite": "tsx src/db/invite.cli.ts"
+  },
+  "dependencies": {
+    "@danielsharp/auth": "^0.2.0",
+    "@danielsharp/common": "^0.1.0",
+    "@danielsharp/http-auth": "^0.2.0",
+    "@danielsharp/redis": "^0.1.0",
+    "@danielsharp/typeline": "^0.1.2",
+    "@danielsharp/typeline-http": "^0.2.0",
+    "@danielsharp/zod": "^0.2.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.44.2",
+    "google-auth-library": "^11.0.2",
+    "pg": "^8.23.0",
+    "picocolors": "^1.1.1",
+    "redis": "^6.2.1",
+    "swagger-ui-dist": "^5.32.14",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.3.0",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.10",
+    "tsdown": "^0.22.14",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.0"
+  }
+}

@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.env
+**/*.tsbuildinfo
+.git
+.github
+.idea
+.vscode
+.claude
+*.md

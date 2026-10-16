@@ -1,0 +1,69 @@
+.login {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.login-mark {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 2.2rem;
+  margin-bottom: 20px;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.login-tagline {
+  margin: 8px 0 32px;
+  max-width: 28ch;
+  color: var(--muted);
+}
+
+.login-error {
+  margin: -12px 0 20px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn);
+  max-width: 32ch;
+}
+
+/* Google's light button: white, a thin grey border, dark text and the coloured mark. */
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: var(--tap);
+  width: min(100%, 320px);
+  padding: 0 20px;
+  border: 1px solid #747775;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1f1f1f;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.google-btn:hover {
+  background: #f2f2f2;
+}
+
+.google-btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
