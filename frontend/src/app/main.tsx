@@ -6,6 +6,7 @@ import "../styles.css";
 import "./app.css";
 import { meQuery, queryClient, useMe } from "./queries";
 import { DocumentsScreen } from "./screens/Documents";
+import { HistoryScreen } from "./screens/History";
 import { InvitesScreen } from "./screens/Invites";
 import { ManageAiScreen } from "./screens/ManageAi";
 import { QuizScreen } from "./screens/Quiz";
@@ -19,6 +20,9 @@ function Header() {
     <header className="header">
       <Link to="/" className="header-title">
         Quizzer
+      </Link>
+      <Link to="/history" className="header-link">
+        Eredményeim
       </Link>
       {me.isOwner && (
         <>
@@ -46,6 +50,7 @@ function App() {
         <Routes>
           <Route path="/" element={<DocumentsScreen />} />
           <Route path="/attempts/:id" element={<QuizScreen />} />
+          <Route path="/history" element={<HistoryScreen />} />
           <Route path="/manage-ai" element={<ManageAiScreen />} />
           <Route path="/invites" element={<InvitesScreen />} />
           <Route path="*" element={<p>Ez az oldal nem létezik.</p>} />

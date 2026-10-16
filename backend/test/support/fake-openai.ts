@@ -29,6 +29,8 @@ export function fakeOpenAI() {
     deltas: ["Szia", " világ!"],
     usage: { input_tokens: 30, output_tokens: 10, total_tokens: 40 },
     failWith: undefined as string | undefined,
+    /** Answers a Responses request by its body, e.g. by the schema it asks for; the deltas otherwise. */
+    respond: undefined as ((request: any) => string) | undefined,
   };
 
   const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -69,7 +71,7 @@ export function fakeOpenAI() {
       if (state.failWith) return sse([{ type: "response.failed", response: { error: { code: state.failWith } } }]);
       return sse([
         { type: "response.created" },
-        ...state.deltas.map((delta) => ({ type: "response.output_text.delta", delta })),
+        ...(state.respond ? [state.respond(JSON.parse(String(body)))] : state.deltas).map((delta) => ({ type: "response.output_text.delta", delta })),
         { type: "response.completed", response: { usage: state.usage } },
       ]);
     }

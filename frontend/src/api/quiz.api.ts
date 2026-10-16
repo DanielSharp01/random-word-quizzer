@@ -14,10 +14,26 @@ export type Answer = {
   answer: string;
 };
 
-export type Attempt = {
-  id: string;
-  documentId: string;
-  title: string;
+export type Verdict = "correct" | "almost" | "wrong";
+
+export type Question = {
+  position: number;
+  question: string;
+  answered: {
+    guess: string;
+    verdict: Verdict;
+    feedback: string | null;
+    checkedBy: "match" | "ai";
+    answer: string;
+    keyPoints: string[];
+    source: string;
+  } | null;
+};
+
+type AttemptBase = { id: string; documentId: string; title: string; createdAt: string };
+
+export type BlanksAttempt = AttemptBase & {
+  kind: "blanks";
   percent: number;
   minLength: number;
   blankCount: number;
@@ -25,7 +41,23 @@ export type Attempt = {
   answers: Answer[];
 };
 
-export type AttemptSettings = { percent: number; minLength: number };
+export type QuestionsAttempt = AttemptBase & { kind: "questions"; section: string; questions: Question[] };
+
+export type Attempt = BlanksAttempt | QuestionsAttempt;
+
+export type AttemptSettings = { kind?: "blanks"; percent: number; minLength: number } | { kind: "questions"; section: number | null; count: number };
+
+export type Section = { index: number; title: string; fromBlock: number; toBlock: number; chars: number };
+
+export type PastAttempt = {
+  id: string;
+  kind: Attempt["kind"];
+  documentId: string;
+  title: string;
+  itemCount: number;
+  score: Record<Verdict, number>;
+  createdAt: string;
+};
 
 export const getDocuments = () => api.get<{ documents: DocumentSummary[] }>("/documents");
 
@@ -42,3 +74,11 @@ export const startAttempt = (documentId: string, settings: AttemptSettings) => a
 export const getAttempt = (id: string) => api.get<Attempt>(`/attempts/${id}`);
 
 export const postAnswer = (attemptId: string, blank: number, guess: string) => api.post<Answer>(`/attempts/${attemptId}/answers`, { blank, guess });
+
+export const getSections = (documentId: string) => api.get<{ sections: Section[]; maxChars: number }>(`/documents/${documentId}/sections`);
+
+export const getHistory = (documentId?: string) =>
+  api.get<{ attempts: PastAttempt[] }>(`/attempts${documentId ? `?documentId=${documentId}` : ""}`);
+
+export const answerQuestion = (attemptId: string, position: number, answer: string) =>
+  api.post<Question>(`/attempts/${attemptId}/questions/${position}/answer`, { answer });

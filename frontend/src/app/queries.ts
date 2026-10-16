@@ -8,6 +8,7 @@ const keys = {
   me: ["me"] as const,
   documents: ["documents"] as const,
   attempt: (id: string) => ["attempts", id] as const,
+  history: ["history"] as const,
 };
 
 export const meQuery = queryOptions({ queryKey: keys.me, queryFn: getMe });
@@ -31,11 +32,27 @@ export async function deleteDocument(id: string) {
 export async function startAttempt(documentId: string, settings: quiz.AttemptSettings) {
   const attempt = await quiz.startAttempt(documentId, settings);
   queryClient.setQueryData(keys.attempt(attempt.id), attempt);
+  void queryClient.invalidateQueries({ queryKey: keys.history });
   return attempt;
 }
 
 export async function answerBlank(attemptId: string, blank: number, guess: string) {
   const answer = await quiz.postAnswer(attemptId, blank, guess);
-  queryClient.setQueryData<quiz.Attempt>(keys.attempt(attemptId), (attempt) => attempt && { ...attempt, answers: [...attempt.answers, answer] });
+  queryClient.setQueryData<quiz.Attempt>(keys.attempt(attemptId), (attempt) =>
+    attempt?.kind === "blanks" ? { ...attempt, answers: [...attempt.answers, answer] } : attempt,
+  );
+  void queryClient.invalidateQueries({ queryKey: keys.history });
   return answer;
 }
+
+export async function answerQuestion(attemptId: string, position: number, answer: string) {
+  const question = await quiz.answerQuestion(attemptId, position, answer);
+  queryClient.setQueryData<quiz.Attempt>(keys.attempt(attemptId), (attempt) =>
+    attempt?.kind === "questions" ? { ...attempt, questions: attempt.questions.map((q) => (q.position === position ? question : q)) } : attempt,
+  );
+  void queryClient.invalidateQueries({ queryKey: keys.history });
+  return question;
+}
+
+export const useHistory = (documentId?: string) =>
+  useSuspenseQuery({ queryKey: [...keys.history, documentId ?? "all"], queryFn: () => quiz.getHistory(documentId).then((r) => r.attempts) }).data;

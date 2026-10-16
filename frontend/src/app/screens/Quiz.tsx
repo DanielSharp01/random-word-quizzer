@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Link, useParams } from "react-router";
-import type { Answer, Attempt, Segment } from "../../api/quiz.api";
-import { answerBlank, useAttempt } from "../queries";
+import type { Answer, BlanksAttempt, Question, QuestionsAttempt, Segment, Verdict } from "../../api/quiz.api";
+import { aiErrorText } from "../aiErrors";
+import { answerBlank, answerQuestion, useAttempt } from "../queries";
 
 const almostReason = { accent: "ékezethiba", typo: "elírás" } as const;
 
@@ -53,7 +54,7 @@ function OpenBlank({ attemptId, blank, length }: { attemptId: string; blank: num
   );
 }
 
-function Segments({ attempt, segments, answers }: { attempt: Attempt; segments: Segment[]; answers: Map<number, Answer> }) {
+function Segments({ attempt, segments, answers }: { attempt: BlanksAttempt; segments: Segment[]; answers: Map<number, Answer> }) {
   return segments.map((segment, i) => {
     if ("text" in segment) return <span key={i}>{segment.text}</span>;
     const answer = answers.get(segment.blank);
@@ -61,28 +62,24 @@ function Segments({ attempt, segments, answers }: { attempt: Attempt; segments: 
   });
 }
 
-function Score({ attempt }: { attempt: Attempt }) {
-  const count = (verdict: Answer["verdict"]) => attempt.answers.filter((a) => a.verdict === verdict).length;
-  const done = attempt.answers.length === attempt.blankCount;
+const verdictLabel: Record<Verdict, string> = { correct: "Helyes", almost: "Majdnem", wrong: "Helytelen" };
+
+function Score({ answered, total, verdicts }: { answered: number; total: number; verdicts: Verdict[] }) {
+  const count = (verdict: Verdict) => verdicts.filter((v) => v === verdict).length;
   return (
     <p className="score">
-      {done ? "Kész! " : `${attempt.answers.length} / ${attempt.blankCount} kitöltve · `}
+      {answered === total ? "Kész! " : `${answered} / ${total} megválaszolva · `}
       <span className="blank-correct">{count("correct")} helyes</span> · <span className="blank-almost">{count("almost")} majdnem</span> ·{" "}
       <span className="blank-wrong">{count("wrong")} helytelen</span>
     </p>
   );
 }
 
-export function QuizScreen() {
-  const attempt = useAttempt(useParams().id!);
+function BlanksQuiz({ attempt }: { attempt: BlanksAttempt }) {
   const answers = new Map(attempt.answers.map((a) => [a.blank, a]));
   return (
-    <article className="quiz">
-      <Link to="/" className="muted">
-        ← Dokumentumaim
-      </Link>
-      <h1>{attempt.title}</h1>
-      <Score attempt={attempt} />
+    <>
+      <Score answered={attempt.answers.length} total={attempt.blankCount} verdicts={attempt.answers.map((a) => a.verdict)} />
       <p className="muted">Írd be a hiányzó szót, és nyomj Entert. Az ékezet- és kisebb elírásokat „majdnem” jónak számoljuk.</p>
       {attempt.blocks.map((block, i) => {
         const content = <Segments attempt={attempt} segments={block.segments} answers={answers} />;
@@ -93,6 +90,109 @@ export function QuizScreen() {
           </p>
         );
       })}
+    </>
+  );
+}
+
+function AnsweredQuestion({ answered }: { answered: NonNullable<Question["answered"]> }) {
+  return (
+    <div className={`question-result question-${answered.verdict}`}>
+      <p className={`blank-${answered.verdict} question-verdict`}>{verdictLabel[answered.verdict]}</p>
+      <p className="question-guess">
+        <span className="muted">A válaszod:</span> {answered.guess || <em>(üres)</em>}
+      </p>
+      {answered.feedback && <p>{answered.feedback}</p>}
+      <p>
+        <span className="muted">Helyes válasz:</span> {answered.answer}
+      </p>
+      <details>
+        <summary className="muted">Forrás a dokumentumból</summary>
+        <blockquote>{answered.source}</blockquote>
+      </details>
+    </div>
+  );
+}
+
+function QuestionCard({ attemptId, question }: { attemptId: string; question: Question }) {
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function submit() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await answerQuestion(attemptId, question.position, answer);
+    } catch (e) {
+      setError(aiErrorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="card question">
+      <p className="question-text">
+        <span className="muted">{question.position + 1}.</span> {question.question}
+      </p>
+      {question.answered ? (
+        <AnsweredQuestion answered={question.answered} />
+      ) : (
+        <form
+          className="stack"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <textarea
+            rows={3}
+            value={answer}
+            disabled={busy}
+            onChange={(e) => setAnswer(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void submit();
+            }}
+            placeholder="A válaszod saját szavaiddal…"
+          />
+          <div className="row">
+            <button className="button" disabled={busy}>
+              {busy ? "Értékelés…" : "Ellenőrzés"}
+            </button>
+            <span className="muted">Ctrl+Enter</span>
+          </div>
+          {error && <p className="error">{error}</p>}
+        </form>
+      )}
+    </li>
+  );
+}
+
+function QuestionsQuiz({ attempt }: { attempt: QuestionsAttempt }) {
+  const answered = attempt.questions.flatMap((q) => (q.answered ? [q.answered.verdict] : []));
+  return (
+    <>
+      <p className="muted">Kérdések ebből: {attempt.section}</p>
+      <Score answered={answered.length} total={attempt.questions.length} verdicts={answered} />
+      <p className="muted">Válaszolj saját szavaiddal. Az AI a dokumentum alapján értékel, és megmutatja, mi hiányzott.</p>
+      <ol className="questions">
+        {attempt.questions.map((q) => (
+          <QuestionCard key={q.position} attemptId={attempt.id} question={q} />
+        ))}
+      </ol>
+    </>
+  );
+}
+
+export function QuizScreen() {
+  const attempt = useAttempt(useParams().id!);
+  return (
+    <article className="quiz">
+      <Link to="/" className="muted">
+        ← Dokumentumaim
+      </Link>
+      <h1>{attempt.title}</h1>
+      {attempt.kind === "blanks" ? <BlanksQuiz attempt={attempt} /> : <QuestionsQuiz attempt={attempt} />}
     </article>
   );
 }

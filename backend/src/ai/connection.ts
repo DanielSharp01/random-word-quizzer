@@ -228,7 +228,7 @@ export const models = async () => chatgpt.listModels(await accessToken());
  * The one way AI is used: refused once the last hour or day has used its share of the owner's
  * plan, cut off at the output cap, and recorded against those windows afterwards.
  */
-export async function ask(request: { instructions?: string; input: string }) {
+export async function ask(request: Pick<chatgpt.StreamRequest, "instructions" | "input" | "format">) {
   const row = await connectionRow();
   if (!row.model) throw new AiUnavailable("no_model");
   const used = await usage();

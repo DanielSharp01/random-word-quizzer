@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { aiConnectionTable, aiUsageTable, usersTable } from "../../src/db/schema";
 import { db } from "../../src/providers/db";
+import { buildDocx } from "../support/docx";
 import { fakeOpenAI } from "../support/fake-openai";
 import { newUser, type Client } from "../support/helpers";
 
@@ -230,5 +231,145 @@ describe("asking", () => {
     const res = await owner.post("/ai/try", { input: "szia" });
     expect(res.status).toBe(503);
     expect(res.body).toMatchObject({ reason: "plan_limit" });
+  });
+});
+
+describe("AI questions", () => {
+  const generated = {
+    questions: [
+      { question: "Mi az ellenőrzés célja?", answer: "A feladatok törvényes végrehajtása.", keyPoints: ["törvényes végrehajtás"], sourceBlock: 1 },
+      { question: "Mik az alapelvei?", answer: "A törvényesség és a szakszerűség.", keyPoints: ["törvényesség", "szakszerűség"], sourceBlock: 3 },
+    ],
+  };
+
+  /** Answers like the real model would: questions for generation, a verdict for grading. */
+  function respondLikeTheModel() {
+    openai.state.respond = (request) =>
+      request.text.format.name === "questions"
+        ? JSON.stringify(generated)
+        : JSON.stringify({ verdict: "almost", feedback: "A szakszerűség kimaradt." });
+  }
+
+  async function documentFor(u: Client, paragraphs = [
+    { text: "Az ellenőrzés célja", style: "Heading1" as const },
+    { text: "Az ellenőrzés célja a feladatok törvényes végrehajtása." },
+    { text: "Az ellenőrzés alapelvei", style: "Heading1" as const },
+    { text: "Alapelve a törvényesség és a szakszerűség." },
+  ]) {
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array(await buildDocx(paragraphs))], "Szabályzat.docx"));
+    return (await u.postForm("/documents", form)).body.id as string;
+  }
+
+  async function sharedPlan() {
+    const owner = await newOwner();
+    await connect(owner);
+    await owner.put("/ai/settings", settings);
+    respondLikeTheModel();
+    return owner;
+  }
+
+  it("splits the document into sections at its headings", async () => {
+    const u = await newUser();
+    const documentId = await documentFor(u);
+    const { body } = await u.get(`/documents/${documentId}/sections`);
+    expect(body.sections.map((s: { title: string }) => s.title)).toEqual(["Az ellenőrzés célja", "Az ellenőrzés alapelvei"]);
+    expect(body.maxChars).toBe(24_000);
+  });
+
+  it("writes questions on the owner's plan for anyone, keeping the key back until answered", async () => {
+    await sharedPlan();
+    const friend = await newUser();
+    const documentId = await documentFor(friend);
+
+    const res = await friend.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ kind: "questions", section: "Szabályzat", questions: [{ position: 0, answered: null }, { position: 1, answered: null }] });
+    expect(JSON.stringify(res.body)).not.toContain("törvényes végrehajtás.");
+
+    const [request] = openai.callsTo("/responses");
+    expect(request!.json.input[0].content[0].text).toContain("[1] Az ellenőrzés célja a feladatok törvényes végrehajtása.");
+    expect(request!.json.text.format).toMatchObject({ type: "json_schema", strict: true, name: "questions" });
+  });
+
+  it("asks for questions about one section only", async () => {
+    await sharedPlan();
+    const u = await newUser();
+    const documentId = await documentFor(u);
+    const res = await u.post(`/documents/${documentId}/attempts`, { kind: "questions", section: 1, count: 2 });
+    expect(res.body.section).toBe("Az ellenőrzés alapelvei");
+    const text = openai.callsTo("/responses")[0]!.json.input[0].content[0].text as string;
+    expect(text).toBe("[2] Az ellenőrzés alapelvei\n[3] Alapelve a törvényesség és a szakszerűség.");
+  });
+
+  it("grades a close answer without AI and the rest with it, once each", async () => {
+    await sharedPlan();
+    const u = await newUser();
+    const documentId = await documentFor(u);
+    const { body: attempt } = await u.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
+    const callsAfterGenerating = openai.callsTo("/responses").length;
+
+    const matched = await u.post(`/attempts/${attempt.id}/questions/0/answer`, { answer: "a feladatok törvényes végrehajtása" });
+    expect(matched.body.answered).toMatchObject({ verdict: "correct", checkedBy: "match", feedback: null, answer: "A feladatok törvényes végrehajtása." });
+    expect(openai.callsTo("/responses")).toHaveLength(callsAfterGenerating);
+
+    const graded = await u.post(`/attempts/${attempt.id}/questions/1/answer`, { answer: "Csak a törvényesség." });
+    expect(graded.body.answered).toMatchObject({
+      verdict: "almost",
+      checkedBy: "ai",
+      feedback: "A szakszerűség kimaradt.",
+      keyPoints: ["törvényesség", "szakszerűség"],
+      source: "Alapelve a törvényesség és a szakszerűség.",
+    });
+    const grading = openai.callsTo("/responses").at(-1)!.json;
+    expect(grading.text.format.name).toBe("evaluation");
+    expect(grading.input[0].content[0].text).toContain("A tanuló válasza: Csak a törvényesség.");
+
+    expect((await u.post(`/attempts/${attempt.id}/questions/1/answer`, { answer: "újra" })).status).toBe(409);
+    expect((await u.post(`/attempts/${attempt.id}/questions/9/answer`, { answer: "x" })).status).toBe(404);
+    expect((await u.get(`/attempts/${attempt.id}`)).body.questions.map((q: { answered: { verdict: string } }) => q.answered.verdict)).toEqual(["correct", "almost"]);
+  });
+
+  it("lists past attempts of both kinds with their scores", async () => {
+    await sharedPlan();
+    const u = await newUser();
+    const documentId = await documentFor(u);
+    const { body: blanks } = await u.post(`/documents/${documentId}/attempts`, { percent: 60, minLength: 4 });
+    await u.post(`/attempts/${blanks.id}/answers`, { blank: 0, guess: "" });
+    const { body: questions } = await u.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
+    await u.post(`/attempts/${questions.id}/questions/0/answer`, { answer: "A feladatok törvényes végrehajtása." });
+
+    const { body } = await u.get("/attempts");
+    expect(body.attempts).toEqual([
+      expect.objectContaining({ id: questions.id, kind: "questions", title: "Szabályzat", itemCount: 2, score: { correct: 1, almost: 0, wrong: 0 } }),
+      expect.objectContaining({ id: blanks.id, kind: "blanks", itemCount: blanks.blankCount, score: { correct: 0, almost: 0, wrong: 1 } }),
+    ]);
+    expect((await u.get(`/attempts?documentId=${documentId}`)).body.attempts).toHaveLength(2);
+    expect((await (await newUser()).get("/attempts")).body.attempts).toEqual([]);
+  });
+
+  it("refuses a section too long to send, and says when AI isn't connected", async () => {
+    await sharedPlan();
+    const u = await newUser();
+    const long = await documentFor(u, [{ text: "szó ".repeat(7000) }]);
+    const tooLong = await u.post(`/documents/${long}/attempts`, { kind: "questions", section: null, count: 3 });
+    expect(tooLong.status).toBe(422);
+    expect(tooLong.body).toMatchObject({ reason: "too_long" });
+
+    await db.delete(aiConnectionTable);
+    const short = await documentFor(u);
+    const off = await u.post(`/documents/${short}/attempts`, { kind: "questions", section: null, count: 3 });
+    expect(off.status).toBe(503);
+    expect(off.body).toMatchObject({ reason: "no_model" });
+  });
+
+  it("leaves no attempt behind when the AI answer is unusable", async () => {
+    await sharedPlan();
+    openai.state.respond = () => "ez nem JSON";
+    const u = await newUser();
+    const documentId = await documentFor(u);
+    const res = await u.post(`/documents/${documentId}/attempts`, { kind: "questions", section: null, count: 2 });
+    expect(res.status).toBe(502);
+    expect((await u.get("/attempts")).body.attempts).toEqual([]);
   });
 });

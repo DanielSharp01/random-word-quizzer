@@ -5,6 +5,9 @@ const createdAt = () => timestamp({ withTimezone: true }).notNull().defaultNow()
 
 export const verdictEnum = pgEnum("verdict", ["correct", "almost", "wrong"]);
 export const almostReasonEnum = pgEnum("almost_reason", ["accent", "typo"]);
+export const attemptKindEnum = pgEnum("attempt_kind", ["blanks", "questions"]);
+/** How a question's answer was judged: matched against the reference without AI, or by AI. */
+export const checkedByEnum = pgEnum("checked_by", ["match", "ai"]);
 
 /**
  * One row per person; Google's subject id is the stable key, since email can change. An invited
@@ -37,16 +40,25 @@ export const documentsTable = pgTable("documents", {
   createdAt: createdAt(),
 });
 
-/** One run through a document. The blanks aren't stored: the seed and settings rebuild them. */
+/**
+ * One run through a document, kept so past scores can be looked back on. A blanks attempt doesn't
+ * store its blanks: the seed and settings rebuild them. A questions attempt stores its questions.
+ */
 export const attemptsTable = pgTable("attempts", {
   id: uuid().primaryKey().defaultRandom(),
   userId: owner(),
   documentId: uuid()
     .notNull()
     .references(() => documentsTable.id, { onDelete: "cascade" }),
-  seed: integer().notNull(),
-  percent: integer().notNull(),
-  minLength: integer().notNull(),
+  kind: attemptKindEnum().notNull().default("blanks"),
+  seed: integer(),
+  percent: integer(),
+  minLength: integer(),
+  /** The blocks a questions attempt was generated from, end exclusive. */
+  fromBlock: integer(),
+  toBlock: integer(),
+  /** Blanks or questions in the attempt; missing on blanks attempts made before it was stored. */
+  itemCount: integer(),
   createdAt: createdAt(),
 });
 
@@ -64,6 +76,29 @@ export const answersTable = pgTable(
     answeredAt: createdAt(),
   },
   (t) => [primaryKey({ columns: [t.attemptId, t.blank] })],
+);
+
+/** An AI-generated question with its answer key, and the person's answer once given. */
+export const questionsTable = pgTable(
+  "questions",
+  {
+    attemptId: uuid()
+      .notNull()
+      .references(() => attemptsTable.id, { onDelete: "cascade" }),
+    position: integer().notNull(),
+    /** The block the question was written from, shown with the feedback. */
+    sourceBlock: integer().notNull(),
+    question: text().notNull(),
+    answer: text().notNull(),
+    /** What a good answer must contain; the grading checks for these. */
+    keyPoints: jsonb().$type<string[]>().notNull(),
+    guess: text(),
+    verdict: verdictEnum(),
+    feedback: text(),
+    checkedBy: checkedByEnum(),
+    answeredAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [primaryKey({ columns: [t.attemptId, t.position] })],
 );
 
 /**

@@ -116,6 +116,8 @@ export type StreamRequest = {
   model: string;
   instructions?: string;
   input: string;
+  /** Strict structured output: the answer is JSON matching this schema. */
+  format?: { name: string; schema: Record<string, unknown> };
   /** This flow rejects max_output_tokens, so the stream is cut off here instead. */
   maxOutputChars: number;
 };
@@ -133,6 +135,7 @@ export async function respond(request: StreamRequest): Promise<{ text: string; u
       stream: true,
       ...(request.instructions ? { instructions: request.instructions } : {}),
       input: [{ role: "user", content: [{ type: "input_text", text: request.input }] }],
+      ...(request.format ? { text: { format: { type: "json_schema", strict: true, ...request.format } } } : {}),
     }),
     signal: abort.signal,
   });

@@ -13,6 +13,7 @@ import { authErrorMapper } from "@danielsharp/http-auth";
 import { z } from "zod";
 import { ChatGptError } from "../ai/chatgpt";
 import { AiLimitReached, AiUnavailable, CallbackRejected } from "../ai/connection";
+import { AiOutputRejected } from "../quiz/questions";
 
 const pgError = z.object({ code: z.string(), constraint: z.string().optional() });
 
@@ -32,6 +33,7 @@ export function mapError(error: unknown): HttpError | undefined {
   if (error instanceof AiLimitReached) return new TooManyRequests({ window: error.window });
   if (error instanceof CallbackRejected) return new BadRequest({ reason: error.reason });
   if (error instanceof ChatGptError) return new BadGateway({ ...(error.code ? { code: error.code } : {}) });
+  if (error instanceof AiOutputRejected) return new BadGateway({ reason: "ai_output" });
   if (HttpValidationError.is(error)) {
     const issues = error.cause instanceof z.ZodError ? error.cause.issues : undefined;
     return new BadRequest({ source: error.source, ...(issues ? { issues } : {}) });
@@ -58,4 +60,5 @@ export function mapError(error: unknown): HttpError | undefined {
 }
 
 /** Errors the client caused aren't worth a stack trace in the log; OpenAI failing is worth one. */
-export const isExpected = (error: unknown) => !(error instanceof ChatGptError) && (isHttpError(error) || mapError(error) !== undefined);
+export const isExpected = (error: unknown) =>
+  !(error instanceof ChatGptError || error instanceof AiOutputRejected) && (isHttpError(error) || mapError(error) !== undefined);
