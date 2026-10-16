@@ -1,0 +1,90 @@
+name: Deploy quizzer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: quizzer-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/danielsharp01/quizzer
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and publish
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERDACCIO_TOKEN: ${{ secrets.VERDACCIO_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${VERDACCIO_TOKEN:?Missing VERDACCIO_TOKEN secret}"
+
+          npmrc=$(mktemp)
+          trap 'rm -f "$npmrc"; docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+          chmod 600 "$npmrc"
+          printf '//verdaccio.danielsharp01.com/:_authToken=%s\n' "$VERDACCIO_TOKEN" > "$npmrc"
+
+          printf '%s' "$GHCR_TOKEN" |
+            docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+          # BuildKit pushes the layers it built; a separate docker push from the containerd image
+          # store can fail with "unknown blob" on base layers the daemon never fully pulled.
+          docker buildx build --pull --push \
+            --secret "id=npmrc,src=$npmrc" \
+            --label org.opencontainers.image.source=https://github.com/DanielSharp01/random-word-quizzer \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$IMAGE:$GITHUB_SHA" .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions: {}
+    steps:
+      - name: Deploy over restricted SSH
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?Missing DEPLOY_HOST variable}"
+          : "${DEPLOY_USER:?Missing DEPLOY_USER variable}"
+          : "${DEPLOY_KNOWN_HOSTS:?Missing DEPLOY_KNOWN_HOSTS variable}"
+          : "${DEPLOY_SSH_KEY:?Missing DEPLOY_SSH_KEY secret}"
+
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+
+          ssh -F /dev/null -T \
+            -i "$ssh_dir/key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o "UserKnownHostsFile=$ssh_dir/known_hosts" \
+            -o ConnectTimeout=15 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"
