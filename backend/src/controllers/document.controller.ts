@@ -16,6 +16,7 @@ import type { Block } from "../quiz/blanks";
 import { blankScope } from "../quiz/blank-scope";
 import { blankStats, CURRENT_BLANK_RULES } from "../quiz/blanks";
 import { readDocx } from "../quiz/docx";
+import { readMarkdown } from "../quiz/markdown";
 import { generateQuestions } from "../quiz/questions";
 import { fitsInOneCall, randomSections, sectionsOf, wholeDocumentSource, type BlockRange } from "../quiz/sections";
 import { AttemptRepository } from "../repositories/attempt.repo";
@@ -52,11 +53,15 @@ const attemptSettingsSchema = z.union([
   }),
 ]);
 
+const MARKDOWN = /\.(md|markdown)$/i;
+
+/** Told apart by extension: browsers send Markdown under several MIME types, often none at all. */
 async function blocksOf(file: File) {
+  if (MARKDOWN.test(file.name)) return readMarkdown(await file.text());
   try {
     return await readDocx(Buffer.from(await file.arrayBuffer()));
   } catch {
-    throw new UnprocessableEntity({ reason: "Not a readable .docx file" });
+    throw new UnprocessableEntity({ reason: "Not a readable .docx or Markdown file" });
   }
 }
 
@@ -84,7 +89,7 @@ export function documentController() {
       .pipe(async ({ auth, body: { file } }) => {
         const blocks = await blocksOf(file);
         if (blocks.length === 0) throw new UnprocessableEntity({ reason: "The document has no text" });
-        const title = file.name.replace(/\.docx$/i, "").trim() || "Névtelen dokumentum";
+        const title = file.name.replace(/\.(docx|md|markdown)$/i, "").trim() || "Névtelen dokumentum";
         return documents.create(auth.userId, title, blocks);
       })
       .pipe(jsonResSend(documentSummarySchema, 201)),

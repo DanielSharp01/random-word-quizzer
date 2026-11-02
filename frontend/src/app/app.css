@@ -161,6 +161,11 @@
   opacity: 0;
 }
 
+.upload-errors {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+}
+
 .upload input:focus-visible + .button,
 .upload .button:has(+ input:focus-visible) {
   outline: 3px solid var(--accent);

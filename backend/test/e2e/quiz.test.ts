@@ -39,6 +39,22 @@ describe("documents", () => {
     expect((await u.get("/documents")).body.documents.map((d: { id: string }) => d.id)).toEqual([res.body.id]);
   });
 
+  it("reads an uploaded Markdown file", async () => {
+    const u = await newUser();
+    const form = new FormData();
+    form.append("file", new File(["# Alapelvek\n\nAz ellenőrzés nem lehet öncélú.\n"], "Jegyzet.md"));
+    const res = await u.postForm("/documents", form);
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ title: "Jegyzet", blockCount: 2 });
+  });
+
+  it("refuses a Markdown file with no text", async () => {
+    const u = await newUser();
+    const form = new FormData();
+    form.append("file", new File(["---\ntags: []\n---\n"], "Üres.md"));
+    expect((await u.postForm("/documents", form)).status).toBe(422);
+  });
+
   it("refuses a file that isn't a .docx", async () => {
     const u = await newUser();
     const form = new FormData();

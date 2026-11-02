@@ -9,43 +9,56 @@ import { Picker, type PickerOption } from "../ui/Picker";
 import { deleteDocument, startAttempt, uploadDocument, useDocuments } from "../queries";
 
 function uploadError(error: unknown) {
-  if (error instanceof ApiError && error.status === 422) return "Ezt a fájlt nem sikerült beolvasni. Biztosan .docx?";
-  if (error instanceof ApiError && error.status === 413) return "A fájl túl nagy (legfeljebb 10 MB).";
-  return "A feltöltés nem sikerült. Próbáld újra.";
+  if (error instanceof ApiError && error.status === 422) return "nem sikerült beolvasni (.docx vagy .md kell, és legyen benne szöveg)";
+  if (error instanceof ApiError && error.status === 413) return "túl nagy (legfeljebb 10 MB)";
+  return "a feltöltés nem sikerült, próbáld újra";
 }
 
 function Upload() {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [progress, setProgress] = useState<{ done: number; total: number }>();
+  const [errors, setErrors] = useState<string[]>([]);
 
-  async function upload(file: File | undefined) {
-    if (!file) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await uploadDocument(file);
-    } catch (e) {
-      setError(uploadError(e));
-    } finally {
-      setBusy(false);
+  async function upload(files: File[]) {
+    if (files.length === 0) return;
+    setErrors([]);
+    const failed: string[] = [];
+    // One at a time: each file is a separate request, and the list fills in as they land.
+    for (const [i, file] of files.entries()) {
+      setProgress({ done: i, total: files.length });
+      try {
+        await uploadDocument(file);
+      } catch (e) {
+        failed.push(`${file.name}: ${uploadError(e)}`);
+      }
     }
+    setProgress(undefined);
+    setErrors(failed);
   }
 
   return (
     <div>
       <label className="upload">
-        <span className="button">{busy ? "Feltöltés…" : "Dokumentum feltöltése (.docx)"}</span>
+        <span className="button">
+          {progress ? (progress.total > 1 ? `Feltöltés… (${progress.done + 1}/${progress.total})` : "Feltöltés…") : "Dokumentumok feltöltése (.docx, .md)"}
+        </span>
         <input
           type="file"
-          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          disabled={busy}
+          multiple
+          accept=".docx,.md,.markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/markdown"
+          disabled={progress !== undefined}
           onChange={(e) => {
-            void upload(e.target.files?.[0]);
+            void upload([...(e.target.files ?? [])]);
             e.target.value = "";
           }}
         />
       </label>
-      {error && <p className="error">{error}</p>}
+      {errors.length > 0 && (
+        <ul className="error upload-errors">
+          {errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -230,7 +243,7 @@ export function DocumentsScreen() {
         <Upload />
       </div>
       {documents.length === 0 ? (
-        <p className="muted">Még nincs dokumentumod. Tölts fel egy .docx fájlt, és kvízt készítünk belőle.</p>
+        <p className="muted">Még nincs dokumentumod. Tölts fel .docx vagy Markdown (.md) fájlokat, és kvízt készítünk belőlük.</p>
       ) : (
         <ul className="documents">
           {documents.map((document) => (
