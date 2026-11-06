@@ -123,7 +123,7 @@ function BlanksSettings({ document, footerEnd }: { document: DocumentSummary; fo
         <label>
           Kitakart szavak aránya
           <span className="input-suffix">
-            <input type="number" min={5} max={60} step={5} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />%
+            <input type="number" min={5} max={100} step={5} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />%
           </span>
         </label>
         <label>

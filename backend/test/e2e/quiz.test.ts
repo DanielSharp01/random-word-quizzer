@@ -109,6 +109,13 @@ describe("attempts", () => {
     expect(close.body).toMatchObject({ verdict: "almost", reason: "typo", answer: words[1] });
   });
 
+  it("blanks at any rate up to 100%", async () => {
+    const u = await newUser();
+    const { body: doc } = await upload(u);
+    expect((await u.post(`/documents/${doc.id}/attempts`, { percent: 100, minLength: 4 })).status).toBe(201);
+    expect((await u.post(`/documents/${doc.id}/attempts`, { percent: 101, minLength: 4 })).status).toBe(400);
+  });
+
   it("keeps attempts to their owner", async () => {
     const [owner, other] = [await newUser(), await newUser()];
     const { body: doc } = await upload(owner);

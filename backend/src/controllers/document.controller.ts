@@ -41,7 +41,7 @@ const attemptSettingsSchema = z.union([
   }),
   z.object({
     kind: z.literal("blanks").default("blanks"),
-    percent: z.int().min(5).max(60).default(20),
+    percent: z.int().min(5).max(100).default(20),
     minLength: z.int().min(1).max(20).default(6),
     scope: z
       .discriminatedUnion("kind", [
