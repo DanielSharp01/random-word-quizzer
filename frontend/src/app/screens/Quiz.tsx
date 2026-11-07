@@ -7,6 +7,9 @@ import { percentOf } from "../score";
 
 const almostReason = { accent: "ékezethiba", typo: "elírás" } as const;
 
+/** A touch screen types on an on-screen keyboard, whose action key stands in for Enter. */
+const touchScreen = window.matchMedia("(pointer: coarse)").matches;
+
 function verdictTitle(answer: Answer) {
   if (answer.verdict === "correct") return "Helyes";
   if (answer.verdict === "almost") return `Majdnem: ${almostReason[answer.reason ?? "typo"]} (te: ${answer.guess})`;
@@ -47,6 +50,8 @@ function OpenBlank({ attemptId, blank, length }: { attemptId: string; blank: num
       autoComplete="off"
       autoCapitalize="off"
       spellCheck={false}
+      // With several fields on a page, Android shows "Next", which moves on without an Enter for this one to check.
+      enterKeyHint="done"
       disabled={busy}
       onKeyDown={(e) => {
         if (e.key === "Enter") void submit();
@@ -83,7 +88,12 @@ function BlanksQuiz({ attempt }: { attempt: BlanksAttempt }) {
     <>
       <p className="muted">Ebből: {attempt.scope}</p>
       <Score answered={attempt.answers.length} total={attempt.blankCount} verdicts={attempt.answers.map((a) => a.verdict)} />
-      <p className="muted">Írd be a hiányzó szót, és nyomj Entert. Az ékezet- és kisebb elírásokat „majdnem” jónak számoljuk.</p>
+      <p className="muted">
+        {touchScreen
+          ? "Írd be a hiányzó szót, és nyomd meg a billentyűzeten a Kész (✓) gombot. Ha üresen nyomod meg, kihagyod a szót, és megmutatjuk."
+          : "Írd be a hiányzó szót, és nyomj Entert. Ha üresen nyomsz Entert, kihagyod a szót, és megmutatjuk."}{" "}
+        Az ékezet- és kisebb elírásokat „majdnem” jónak számoljuk.
+      </p>
       {attempt.blocks.map((block, i) => {
         const content = <Segments attempt={attempt} segments={block.segments} answers={answers} />;
         const gap = block.gapBefore && (
