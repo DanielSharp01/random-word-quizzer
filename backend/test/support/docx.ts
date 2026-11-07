@@ -1,14 +1,15 @@
 import JSZip from "jszip";
 
-export type DocxParagraph = { text: string; style?: "Heading1"; listLevel?: number };
+export type DocxParagraph = { text: string; style?: "Heading1"; listLevel?: number; outlineLevel?: number };
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 const escape = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function paragraph({ text, style, listLevel }: DocxParagraph) {
+function paragraph({ text, style, listLevel, outlineLevel }: DocxParagraph) {
   const properties = [
     style ? `<w:pStyle w:val="${style}"/>` : "",
     listLevel === undefined ? "" : `<w:numPr><w:ilvl w:val="${listLevel}"/><w:numId w:val="1"/></w:numPr>`,
+    outlineLevel === undefined ? "" : `<w:outlineLvl w:val="${outlineLevel}"/>`,
   ].join("");
   return `<w:p>${properties ? `<w:pPr>${properties}</w:pPr>` : ""}<w:r><w:t xml:space="preserve">${escape(text)}</w:t></w:r></w:p>`;
 }
