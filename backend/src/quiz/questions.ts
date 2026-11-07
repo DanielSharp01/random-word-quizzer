@@ -1,7 +1,7 @@
 import { z } from "zod";
 import * as ai from "../ai/connection";
 import type { Block } from "./blanks";
-import { MAX_SOURCE_CHARS, type BlockRange } from "./sections";
+import { MAX_SOURCE_CHARS, sourceText, type BlockRange } from "./sections";
 import { checkAnswer, type Verdict } from "./check";
 
 export class AiOutputRejected extends Error {
@@ -64,15 +64,8 @@ export type GeneratedQuestion = z.infer<typeof generatedSchema>["questions"][num
 
 /** Questions with their answer key, written from the given runs of blocks. */
 export async function generateQuestions(blocks: Block[], ranges: BlockRange[], count: number): Promise<GeneratedQuestion[]> {
-  const input = ranges
-    .map(({ fromBlock, toBlock }) =>
-      blocks
-        .slice(fromBlock, toBlock)
-        .map((block, i) => `[${fromBlock + i}] ${block.text}`)
-        .join("\n"),
-    )
-    .join("\n\n")
-    .slice(0, MAX_SOURCE_CHARS);
+  // Cuts only a single paragraph longer than the limit; whatever picked the ranges kept within it.
+  const input = sourceText(blocks, ranges).slice(0, MAX_SOURCE_CHARS);
   const instructions = generateInstructions(count, ranges.length > 1);
   const { text } = await ai.ask({ instructions, input, format: { name: "questions", schema: generatedJsonSchema } });
   const inRange = (block: number) => ranges.some((r) => block >= r.fromBlock && block < r.toBlock);

@@ -3,7 +3,7 @@ import type { Block } from "./blanks";
 /** About 8k tokens of Hungarian; longer passages make for vaguer questions and a costlier call. */
 export const MAX_SOURCE_CHARS = 24_000;
 
-/** `titled`: the section starts with its title block, which a page can show as a heading. */
+/** `titled`: the section starts with its title block, which a page can show as a heading. `chars`: its length as sent to AI. */
 export type Section = { index: number; title: string; titled: boolean; fromBlock: number; toBlock: number; chars: number };
 
 /**
@@ -18,7 +18,24 @@ export function looksLikeTitle(text: string) {
   return /^\p{Lu}/u.test(text);
 }
 
-const charsOf = (blocks: Block[], fromBlock: number, toBlock: number) => blocks.slice(fromBlock, toBlock).reduce((sum, b) => sum + b.text.length, 0);
+const RUN_SEPARATOR = "\n\n";
+
+/** Numbered by its place in the document, so a question can name the paragraph it came from. */
+const sourceLine = (block: Block, index: number) => `[${index}] ${block.text}`;
+
+/** The runs of blocks as sent to AI. Every size limit here measures this text, so sending it never cuts anything off. */
+export function sourceText(blocks: Block[], ranges: BlockRange[]) {
+  return ranges
+    .map(({ fromBlock, toBlock }) =>
+      blocks
+        .slice(fromBlock, toBlock)
+        .map((block, i) => sourceLine(block, fromBlock + i))
+        .join("\n"),
+    )
+    .join(RUN_SEPARATOR);
+}
+
+const charsOf = (blocks: Block[], fromBlock: number, toBlock: number) => sourceText(blocks, [{ fromBlock, toBlock }]).length;
 
 const paragraphs = ({ fromBlock, toBlock }: { fromBlock: number; toBlock: number }) =>
   toBlock - fromBlock === 1 ? `${toBlock}. bekezdés` : `${fromBlock + 1}–${toBlock}. bekezdés`;
@@ -29,13 +46,14 @@ function split(blocks: Block[], fromBlock: number, toBlock: number, max: number)
   let start = fromBlock;
   let chars = 0;
   for (let i = fromBlock; i < toBlock; i++) {
-    const length = blocks[i]!.text.length;
+    const length = sourceLine(blocks[i]!, i).length;
     if (i > start && chars + length > max) {
       parts.push({ fromBlock: start, toBlock: i });
       start = i;
       chars = 0;
     }
-    chars += length;
+    // The newline before the next line.
+    chars += length + 1;
   }
   parts.push({ fromBlock: start, toBlock });
   return parts;
@@ -86,9 +104,10 @@ export function wholeDocumentSource(blocks: Block[], random: () => number = Math
   const picked: Section[] = [];
   let chars = 0;
   for (const section of shuffled) {
-    if (chars + section.chars > max) continue;
+    const cost = section.chars + (picked.length > 0 ? RUN_SEPARATOR.length : 0);
+    if (chars + cost > max) continue;
     picked.push(section);
-    chars += section.chars;
+    chars += cost;
   }
   // Only a single paragraph longer than the budget leaves nothing picked; it gets cut when sent.
   if (picked.length === 0) picked.push(shuffled[0]!);

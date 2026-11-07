@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Block } from "../../src/quiz/blanks";
-import { looksLikeTitle, randomSections, sectionsOf, wholeDocumentSource } from "../../src/quiz/sections";
+import { looksLikeTitle, randomSections, sectionsOf, sourceText, wholeDocumentSource } from "../../src/quiz/sections";
 
 const p = (text: string): Block => ({ kind: "paragraph", text });
 const h = (text: string): Block => ({ kind: "heading", text });
@@ -27,8 +27,8 @@ describe("looksLikeTitle", () => {
 describe("sectionsOf", () => {
   it("splits at Word headings when the document has them, each running to the next", () => {
     expect(sectionsOf([h("Célja"), p("abc"), p("de"), h("Alapelvei"), p("f")])).toEqual([
-      { index: 0, title: "Célja", titled: true, fromBlock: 0, toBlock: 3, chars: 10 },
-      { index: 1, title: "Alapelvei", titled: true, fromBlock: 3, toBlock: 5, chars: 10 },
+      { index: 0, title: "Célja", titled: true, fromBlock: 0, toBlock: 3, chars: 24 },
+      { index: 1, title: "Alapelvei", titled: true, fromBlock: 3, toBlock: 5, chars: 19 },
     ]);
   });
 
@@ -60,16 +60,21 @@ describe("sectionsOf", () => {
 
   it("marks only the first part of a cut section as starting with its title", () => {
     const blocks = [h("Hosszú"), p("x".repeat(40)), p("y".repeat(40)), p("z".repeat(40))];
-    expect(sectionsOf(blocks, 90).map((s) => s.titled)).toEqual([true, false]);
+    expect(sectionsOf(blocks, 110).map((s) => s.titled)).toEqual([true, false]);
   });
 
   it("cuts a section too long for one call into numbered parts", () => {
     const blocks = [h("Hosszú"), p("x".repeat(40)), p("y".repeat(40)), p("z".repeat(40))];
-    // The heading and two paragraphs make 86, within 90; the third starts a new part.
-    expect(sectionsOf(blocks, 90).map((s) => [s.title, s.fromBlock, s.toBlock])).toEqual([
+    // As sent, the heading and two paragraphs make 100, within 110; the third starts a new part.
+    expect(sectionsOf(blocks, 110).map((s) => [s.title, s.fromBlock, s.toBlock])).toEqual([
       ["Hosszú (1. rész, 1–3. bekezdés)", 0, 3],
       ["Hosszú (2. rész, 4. bekezdés)", 3, 4],
     ]);
+  });
+
+  it("cuts a section that fits only without its paragraph numbers", () => {
+    const blocks = [h("Hosszú"), p("x".repeat(40)), p("y".repeat(40)), p("z".repeat(40))];
+    for (const section of sectionsOf(blocks, 130)) expect(sourceText(blocks, [section]).length).toBeLessThanOrEqual(130);
   });
 });
 
@@ -81,10 +86,10 @@ describe("wholeDocumentSource", () => {
   });
 
   it("samples sections up to the budget, in document order", () => {
-    // Each section is 51 chars, so two fit in 110; the keys put C first, then A.
+    // Each section is 60 characters as sent, with 2 between two of them, so two fit in 130; the keys put C first, then A.
     const keys = [0.5, 0.9, 0.1];
     let i = 0;
-    expect(wholeDocumentSource(blocks, () => keys[i++]!, 110)).toEqual([
+    expect(wholeDocumentSource(blocks, () => keys[i++]!, 130)).toEqual([
       { fromBlock: 0, toBlock: 2 },
       { fromBlock: 4, toBlock: 6 },
     ]);
@@ -97,6 +102,11 @@ describe("wholeDocumentSource", () => {
 
   it("still sends something when a single paragraph is over the budget", () => {
     expect(wholeDocumentSource([p("x".repeat(500))], Math.random, 100)).toEqual([{ fromBlock: 0, toBlock: 1 }]);
+  });
+
+  it("never sends more than the budget once the paragraphs are numbered", () => {
+    const fitsBare = [h("A"), p("a".repeat(95)), h("B"), p("b".repeat(95)), h("C"), p("c".repeat(95))];
+    expect(sourceText(fitsBare, wholeDocumentSource(fitsBare, Math.random, 300)).length).toBeLessThanOrEqual(300);
   });
 });
 
