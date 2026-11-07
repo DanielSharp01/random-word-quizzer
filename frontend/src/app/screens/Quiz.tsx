@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router";
 import type { Answer, BlanksAttempt, Question, QuestionsAttempt, Segment, Verdict } from "../../api/quiz.api";
 import { aiErrorText } from "../aiErrors";
 import { answerBlank, answerQuestion, useAttempt } from "../queries";
+import { percentOf } from "../score";
 
 const almostReason = { accent: "ékezethiba", typo: "elírás" } as const;
 
@@ -69,6 +70,7 @@ function Score({ answered, total, verdicts }: { answered: number; total: number;
   return (
     <p className="score">
       {answered === total ? "Kész! " : `${answered} / ${total} megválaszolva · `}
+      <strong>{percentOf({ correct: count("correct"), almost: count("almost") }, total)}%</strong> ·{" "}
       <span className="blank-correct">{count("correct")} helyes</span> · <span className="blank-almost">{count("almost")} majdnem</span> ·{" "}
       <span className="blank-wrong">{count("wrong")} helytelen</span>
     </p>

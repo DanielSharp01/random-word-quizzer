@@ -1,14 +1,10 @@
 import { Link, useSearchParams } from "react-router";
 import type { PastAttempt } from "../../api/quiz.api";
 import { useHistory } from "../queries";
+import { percentOf } from "../score";
 
 const dateTime = new Intl.DateTimeFormat("hu-HU", { dateStyle: "medium", timeStyle: "short" });
 const kindLabel: Record<PastAttempt["kind"], string> = { blanks: "Kitakart szavak", questions: "AI kérdések" };
-
-/** Almost counts as half, so a run full of near-misses doesn't look like a perfect one. */
-function percentOf({ score, itemCount }: PastAttempt) {
-  return itemCount === 0 ? 0 : Math.round(((score.correct + score.almost / 2) / itemCount) * 100);
-}
 
 function Row({ attempt }: { attempt: PastAttempt }) {
   const answered = attempt.score.correct + attempt.score.almost + attempt.score.wrong;
@@ -23,7 +19,7 @@ function Row({ attempt }: { attempt: PastAttempt }) {
           </div>
         </div>
         <div className="history-score">
-          <strong>{percentOf(attempt)}%</strong>
+          <strong>{percentOf(attempt.score, attempt.itemCount)}%</strong>
           <div className="muted">
             {done ? "kész" : `${answered} / ${attempt.itemCount}`} · <span className="blank-correct">{attempt.score.correct}</span> /{" "}
             <span className="blank-almost">{attempt.score.almost}</span> / <span className="blank-wrong">{attempt.score.wrong}</span>
